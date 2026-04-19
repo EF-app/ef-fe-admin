@@ -1,0 +1,2772 @@
+﻿-- ============================================================================
+-- EF Project — 통합 DDL v2.1 (MariaDB 11.4 / utf8mb4_unicode_ci)
+-- ----------------------------------------------------------------------------
+-- 대상 도메인
+--   [0] 공통 : users / categories / report
+--   [1] 유료화: 구독 / 별(재화) / 아이템 / 사용량 카운터 (daily/monthly) / 광고
+--   [2] 매칭  : 프로필 / 관심사 / 이상형 / 매칭풀 / 액션 / 결과 / 차단 / 방문
+--   [3] 포스트잇: 게시글 / 답장
+--   [3-B] 통합 채팅: chat_room / chat_message (v1.9~)
+--   [4] 밸런스게임: 게임 / 신청 / 투표 / 댓글 / 댓글좋아요 / 익명닉네임
+--   [5] 운영  : 감사 로그 / ShedLock (스케줄러 분산 락)
+--   [6] 알림  : FCM 디바이스 토큰 / 알림 이력 / 유저 알림 설정
+--   [7] 법규·개인정보: 동의 이력 / 파기 이력 / 사진 관리
+--   [7-B] 관리자: 관리자 계정 / 로그인 이력 / 제재 / 공지 / 재무집계
+-- ----------------------------------------------------------------------------
+-- v2.0 → v2.1 변경 사항 (3건)
+--
+--   (DS) users.status ENUM 추가
+--        · ACTIVE / WARNING / TEMP_SUSPENDED / PERMANENTLY_SUSPENDED
+--        · 로그인 필터에서 TEMP/PERMANENTLY_SUSPENDED 차단 (JOIN 없이 O(1) 판정)
+--        · 7일/30일 구분은 user_suspension.ends_at 참조
+--        · AdminSuspensionService 가 제재 시 users.status 도 함께 UPDATE
+--        · 제재 자동 해제 배치: ends_at 지나면 users.status → ACTIVE
+--        · idx_users_status 인덱스 추가
+--
+--   (DT) user_profile 프로필 심사 컬럼 추가
+--        · profile_status ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING'
+--          신규 가입·사진 변경 시 PENDING 으로 자동 전환
+--          관리자 승인 후 APPROVED (매칭 피드 정상 노출)
+--          반려 시 REJECTED + profile_rejected_reason 안내
+--        · profile_rejected_reason VARCHAR(255) — 반려 사유 (유저에게 노출)
+--        · profile_reviewed_at DATETIME — 마지막 심사 시각
+--        · profile_reviewed_by BIGINT → admin_account.id (후처리 FK)
+--        · match_pool 계산 시 APPROVED 프로필만 대상
+--        · idx_profile_status 인덱스 추가
+--
+--   (DU) bal_game 각 선택지 설명 컬럼 추가 (bal_apply 는 제외)
+--        · option_a_desc VARCHAR(500) — A 선택지 부연 설명 (NULL 허용)
+--        · option_b_desc VARCHAR(500) — B 선택지 부연 설명 (NULL 허용)
+--        · 기존 description (게임 전체 배경 설명) 유지
+--        · bal_apply 는 제목(option_a/b)만 신청, 설명은 관리자가 bal_game 편집 시 추가
+--
+-- v1.9 → v2.0 변경 사항 (대규모 리팩토링 · 총 19건)
+--
+--   [유료화·사용량 관리]
+--   (DA) user_inventory 테이블 삭제
+--        · 프리미엄 월간 보너스는 "카운터 방식" (미사용 시 소멸) 정책 확정
+--        · 인벤토리 방식 필요 없음 — user_monthly_usage 로 대체
+--
+--   (DB) user_daily_usage 축소 운영 — 테이블은 유지하되 기록 대상 최소화
+--        · 기본 유저의 REWIND (되돌리기 1회/일) 만 기록
+--        · 그 외 한도 체크는 도메인 테이블에서 직접 COUNT
+--          (포스트잇 글쓰기 → post_it, 답장 → chat_room, 강조좋아요 → match_actions)
+--
+--   (DC) user_monthly_usage 신설 — 프리미엄 월간 무료 횟수 카운터
+--        · PROFILE_BOOST 월 1회, SUPER_LIKE 월 5회, PRE_MESSAGE 월 3회 등
+--        · 월 1일 기준 초기화 (period_start = DATE_FORMAT(NOW, '%Y-%m-01'))
+--        · 비구독자에게는 아이템 대신 별로 지급하므로 카운터 기록 불필요
+--
+--   (DD) subscription_plan 구조 확정
+--        · monthly_free_items JSON — {"SUPER_LIKE":5, "PROFILE_BOOST":1, "PRE_MESSAGE":3}
+--        · benefits JSON         — 플래그성 혜택 {"unlimited_post":true, ...}
+--
+--   (DE) payment_daily_summary.item_revenue 제거
+--        · 모든 아이템은 별로 구매되므로 star_revenue 에 이미 포함
+--        · item_spent_stars 같은 보조 컬럼 추가하지 않음 (필요 시 star_transaction 에서 집계)
+--
+--   [매칭·PRE_MESSAGE]
+--   (DF) match_results 구조 정리
+--        · PK: CHAR(36) UUID → BIGINT AUTO_INCREMENT 로 변경 (내부 PK)
+--        · uuid 컬럼 제거 (외부 노출은 user uuid 조합으로 대체)
+--        · popup_shown_a/b 이미 v1.9 에서 제거됨
+--        · a_last_read, b_last_read → chat_room 으로 이동
+--        · trigger_type ENUM 신규 추가
+--          ('MUTUAL_LIKE', 'PRE_MESSAGE_REPLY', 'PRE_MESSAGE_LIKE')
+--          매칭 경로 추적용
+--
+--   (DG) match_actions.is_read 제거
+--        · 슈퍼좋아요는 3일간 전용 창에 노출 (create_time 기준 필터)
+--        · 별도 읽음 여부 기록 불필요
+--
+--   (DH) match_message_log 테이블 삭제
+--        · PRE_MESSAGE 는 chat_room + chat_message 로 통합
+--        · 파워메시지 발송 시점에 chat_room 즉시 생성 (match_result_id=NULL)
+--        · 상대 답장 또는 LIKE 응답 시 match_result 생성 + chat_room.match_result_id 채움
+--        · 답장만 하고 LIKE 없음: match_actions 별도 기록 안 함
+--        · 포스트잇 답장: 매칭 성사 X (포스트잇은 익명 영역)
+--
+--   [포스트잇·채팅]
+--   (DI) post_it.is_lightning 제거
+--        · categories.code='LIGHTN' 으로 판정
+--        · 인덱스 추가: idx_post_user_cat_time(user_id, category_id, create_time)
+--        · 번개글 1개/일 체크는 카테고리 조인으로 처리
+--
+--   (DJ) chat_room 스냅샷·배너 컬럼 추가
+--        · post_content_snapshot TEXT — POST 방 원글 내용 스냅샷 (불변)
+--        · related_match_room_id BIGINT — 같은 페어의 활성 MATCH 방 참조
+--          UI 에서 "이미 매칭된 @{nickname}님과의 포스트잇 대화" 배너 표시용
+--        · 매칭 해제 시 NULL 처리 (배치 또는 이벤트)
+--
+--   (DK) chat_room is_active 정책 명시
+--        · 원글 삭제되어도 is_active=TRUE 유지 (UI 에서 "원문 삭제됨" 표시)
+--        · is_active=FALSE 전환 조건: 차단 / 매칭 해제만
+--        · 방 나가기는 left_user_a/b 로 처리 (개별 유저 리스트에서만 숨김)
+--
+--   [밸런스게임]
+--   (DL) bal_game.total_count Generated Column 제거
+--        · a_count + b_count 는 앱/API 레이어에서 계산
+--        · 투표는 원자 UPDATE 사용 (비관적 락 언급 제거)
+--
+--   [운영·보안]
+--   (DM) audit_log.actor_id → admin_id 리네임
+--        · FK 추가: admin_account(id) RESTRICT (관리자 삭제 금지 정책 반영)
+--
+--   (DN) report 구조 정리
+--        · target_id_long 제거 (모든 엔티티에 uuid 있음)
+--        · target_uuid CHAR(36) 로 통일
+--        · reporter_id FK: ON DELETE SET NULL 유지 (행은 유지, 컬럼만 NULL)
+--        · admin_processed_by FK: ON DELETE SET NULL
+--        · resulted_suspension_id BIGINT 추가 — 이 신고가 어떤 제재로 이어졌나
+--
+--   (DO) user_suspension.report_id 제거
+--        · "대표 신고 1건 + 누적 카운트" 정책
+--        · 대신 report.resulted_suspension_id 로 역참조
+--
+--   [FK 정책 전체 재검토]
+--   (DP) ON DELETE 정책 표준화
+--        · payment_logs.user_id / ref_plan_id → SET NULL (법령상 5년 보관)
+--        · star_transaction.user_id → SET NULL
+--        · user_subscription.user_id → SET NULL / plan_id → RESTRICT
+--        · report.reporter_id / admin_processed_by → SET NULL
+--        · audit_log.admin_id → RESTRICT (관리자 삭제 금지)
+--        · user_suspension.created_by → RESTRICT
+--        · notice.create_user → RESTRICT
+--        · chat_message.sender_id → SET NULL
+--        · match_actions/results → CASCADE (유저 물리 삭제 시 정리)
+--
+--   [개인정보·알림]
+--   (DQ) user_consent 컬럼 방식으로 재설계
+--        · 기존: (user_id, consent_type, agreed_at) 행 기반
+--        · 신규: user_id PK + 각 동의별 _ver/_date 컬럼
+--          terms_agreed_ver / terms_agreed_date
+--          privacy_agreed_ver / privacy_agreed_date
+--          sensitive_agreed_ver / sensitive_agreed_date
+--          marketing_agreed_ver / marketing_agreed_date
+--        · agreed_at 은 create_time 으로 통합 (단, 마이그레이션 시 주의)
+--        · withdrawn_at 은 마케팅 철회 추적용으로 유지
+--
+--   (DR) notification_log ENUM 확장
+--        · PRE_MESSAGE_STALE 추가 (파워메시지 3일 응답 없음 전용 푸시)
+--        · POST_CHAT_STALE 기존 유지
+--        · 배치 로직: room_type=MATCH + match_result_id IS NULL → PRE_MESSAGE_STALE
+--                     room_type=MATCH + match_result_id NOT NULL → MATCH_CHAT_STALE
+--                     room_type=POST → POST_CHAT_STALE
+--
+-- v1.8 → v1.9 변경 사항 (채팅 테이블 통합 · 매칭 성공 팝업 단순화)
+--   (CA) 채팅 테이블 통합 — chat_room · chat_message 신설
+--        · room_type ENUM('POST', 'MATCH') 로 종류 구분
+--        · 이전 4개 테이블(post_chat_room, post_chat_message,
+--          match_chat_room, match_chat_message) 제거
+--        · 외래키 정리: report / audit_log 등 FK 참조 단순화
+--        · UX 목적: 통합 채팅 리스트 (포스트잇·매칭 한 리스트에 최신순)
+--
+--   (CB) 매칭 성공 팝업 컬럼 완전 제거
+--        · match_results 의 popup_shown_a/b 컬럼 제거
+--        · chat_room 에도 popup 컬럼 없음
+--        · 정책: 매칭 성사 순간 FCM 푸시 + WebSocket 으로 1회만 팝업 노출
+--                 서버는 팝업 노출 상태를 저장하지 않음
+--                 매칭 현황은 별도 "매칭 확인 페이지" 에서 조회
+--
+--   (CC) 채팅 나가기 (혼자 나가기)
+--        · chat_room 에 left_user_a / left_user_b BOOLEAN 추가
+--        · 나간 유저의 리스트에서만 숨김 (상대방은 방 유지)
+--        · CONFIRM 체크 시 "나간 방"은 기존 방으로 인식하지 않음
+--          → 상대와 재 매칭 / 재 포스트잇 답장 시 새 방 생성
+--
+--   (CD) 3일 무응답 알림 POST 에도 확장
+--        · stale_notified_at 컬럼을 chat_room 에 두고 POST·MATCH 모두 적용
+--        · 알림 타입 추가: POST_CHAT_STALE (기존 MATCH_CHAT_STALE 에 더해)
+--        · notification_log.notification_type ENUM 에 POST_CHAT_STALE 추가
+--        · 배치 1종으로 통합 (room_type 구분 없이 stale 조건 검사)
+--        · SYSTEM 메시지와 FCM 본문은 Service 레이어에서 room_type 별 분기
+--
+--   (CE) 포스트잇 포워딩은 기존 정책 유지
+--        · 유저 페어 기준 병합 X — 포스트잇은 익명이므로
+--        · post_id 기준으로만 판정 (같은 포스트잇에 다시 답장 시 기존 방)
+--        · 같은 유저의 다른 포스트잇에는 매번 새 방 생성
+--
+--   (CF) Service 검증 책임 증가 (중요)
+--        · room_type='POST' 일 때 post_id 필수, match_result_id=NULL
+--        · room_type='MATCH' 일 때 match_result_id 필수, post_id=NULL
+--        · MariaDB CHECK 파서 버그로 DB 제약 불가 → Service 검증만
+--        · 이 규칙은 v1.9 사용 팀 반드시 숙지 필요
+--
+-- v1.7 → v1.8 변경 사항 (관리자 도메인 신설 · 유저 테이블 정리)
+--   (BA) 관리자 계정 분리 — admin_account 신설
+--        · 일반 유저(users)와 관리자를 테이블 수준에서 분리
+--        · 관리자 전용 컬럼(totp, failed_login_count 등)이 users 에 쌓이는 것 방지
+--        · role 컬럼 포함 — ENUM('SUPER_ADMIN','ADMIN','MODERATOR','FINANCE','CS')
+--          Phase 1 에서는 모두 'ADMIN' 으로 운영, Phase 2 에서 세분화
+--        · 초기 계정 생성은 DB 직접 INSERT 방식 (회원가입 UI 없음)
+--        · 비밀번호 정책: MVP 에서는 최소 요건만(bcrypt 해시), 복잡도 강제 없음
+--          → 추후 업데이트에서 재사용 금지/90일 주기 변경 검토
+--        · 계정 삭제 금지 — is_active=FALSE 로 비활성화만 가능
+--          (audit_log 등 FK 무결성 유지 + 퇴사자 행적 추적 가능)
+--        · 중복 로그인 허용 (앱 + 웹 동시 접속 가능)
+--
+--   (BB) users.role 컬럼 제거
+--        · 관리자가 별도 테이블로 분리되었으므로 users 에 role 불필요
+--        · 매칭 쿼리에서 role='USER' 필터를 제거해도 됨 — 성능 향상
+--        · 혹시 테스트용으로 운영자가 사용하는 일반 계정(users)은
+--          role 없이 그냥 일반 유저로 취급됨
+--
+--   (BC) 관리자 로그인 이력 admin_login_log 신설
+--        · Phase 1 부터 사용 — 모든 로그인 시도 기록 (성공/실패/IP/UA)
+--        · 실패 사유 기록 (비밀번호 오류, 계정 잠금, IP 차단 등)
+--        · totp_verified 컬럼은 Phase 2 대비 (현재는 NULL)
+--        · 5회 실패 시 10분 계정 잠금 — admin_account.locked_until 사용
+--
+--   (BD) 유저 제재 이력 user_suspension 신설
+--        · 경고 / 일시정지(7일/30일/커스텀) / 영구정지 관리
+--        · 자동 해제 배치 (매일 00:00) — ends_at 지난 건 is_lifted=TRUE
+--        · 신고와 연결 가능 (report_id FK)
+--        · 제재한 관리자(admin_id), 해제한 관리자 모두 기록
+--
+--   (BE) 공지사항 원문 notice 신설
+--        · 제목 + 본문 + 대상 필터 + 예약 발송 시각
+--        · 조건부 발송: ALL / IOS / ANDROID / PREMIUM / SEGMENT(JSON 필터)
+--        · 발송 소스 구분 — send_source ENUM('APP','WEB')
+--        · 발송 전: 수정·삭제 가능 / 발송 후: 수정·삭제 불가
+--          (긴급 수정 시 정정 공지를 별도 발송)
+--        · 발송 수, 읽음 수 집계 기록
+--
+--   (BF) 재무 정산 요약 payment_daily_summary 신설
+--        · 매일 00:30 배치로 전날 매출·환불·구독 추이 집계
+--        · 대시보드에서 그래프로 조회 (실시간 집계 쿼리 부하 방지)
+--
+--   (BG) 추후 업데이트 예정 항목 (DDL 에는 현재 미포함, 주석으로 기록)
+--        · admin_password_history — 비밀번호 재사용 금지 도입 시
+--        · admin_account.totp_secret / totp_enabled — Phase 2 의 TOTP 2FA
+--        · admin_account.failed_login_count / locked_until — 잠금 정책 강화 시
+--        · IP 화이트리스트 (Cloudflare WAF 또는 Spring Security Filter)
+--        · 유저 사칭 로그인 (관리자가 유저 세션으로 진입, 읽기 전용)
+--        · 관리자 휴가·대리 권한
+--        · 관리자 활동 Slack 알림 연동
+--        · 모바일 앱 관리자 지문·Face ID 생체인증
+--        · user_blacklist — 영구정지 유저 CI/DI 해시 기반 재가입 차단
+--
+-- v1.6 → v1.7 변경 사항 (법규 준수 · 프로필 사진 · 실시간 기능 · 환불 정책)
+--   (AA) 개인정보 동의 이력 user_consent 신설
+--        · 필수 4종 (이용약관/개인정보처리방침/만14세/본인인증) + 선택 3종
+--        · 약관 버전, 동의 IP, UserAgent 기록 — 법적 증빙용
+--
+--   (AB) 개인정보 파기 이력 user_destruction_log 신설
+--        · 탈퇴 후 30일 보관 → 배치로 개인정보 파기 시 기록
+--        · 법적 감사 대응 (개인정보보호법 제21조)
+--
+--   (AC) 프로필 사진 테이블 user_photo 신설
+--        · 유저당 여러 장 등록 (is_main=TRUE 로 메인 표시)
+--        · Cloudflare R2 저장, 메인 지정은 Service 레이어에서 1개만 강제
+--        · user_profile.main_photo_url 제거 — 대신 JOIN 으로 조회
+--
+--   (AD) 채팅방 3일 무응답 알림
+--        · match_chat_room.stale_notified_at DATETIME — 중복 알림 방지
+--        · match_chat_message.message_type ENUM ('TEXT','SYSTEM') 신설
+--        · post_chat_message.message_type ENUM ('TEXT','SYSTEM','POST_QUOTE') 신설
+--        · notification_log.notification_type 에 MATCH_CHAT_STALE 추가
+--
+--   (AE) 환불 정책 반영
+--        · user_subscription.any_feature_used BOOLEAN 신설
+--        · 프리미엄 혜택 사용 이력 추적 → 7일 내 & 미사용만 환불 허용
+--        · payment_logs 에 refund_reason / refund_type 컬럼 추가
+--
+--   (AF) 본인인증 연동 컬럼 (휴대폰 PASS 인증)
+--        · users.verified_birth_date DATE — PASS 인증으로 획득한 생년월일
+--        · users.identity_verified_at DATETIME — 인증 완료 시각
+--        · 만 14세 미만 가입 단계 차단에 사용
+--
+--   (AG) 탈퇴 플로우 관련 컬럼
+--        · users.withdraw_date 는 이미 존재 (v1.2) — Soft delete 기준
+--        · 30일 경과 배치가 user_destruction_log 에 기록 후 개인정보 파기
+--
+--   (AH) 제거된 것
+--        · user_profile.main_photo_url — user_photo 로 대체됨
+--
+-- v1.5 → v1.6 변경 사항 (외부 식별자 uuid 확장 · 닉네임 정책 · 채팅방 스냅샷)
+--   (W) 외부 노출용 uuid 컬럼 추가 (옵션 B — 6개 테이블):
+--       · bal_game, bal_game_comment, post_it, notification_log,
+--         match_chat_message, post_chat_message
+--       · API path 에는 BIGINT id 대신 uuid 를 사용하여 순차 스캔 공격 방어
+--       · 내부 조인은 여전히 id(BIGINT) 사용 — 성능·인덱스 효율 유지
+--
+--   (X) 닉네임 정책 강화:
+--       · users.nickname UNIQUE (중복 금지)
+--       · users.nickname_changed_at DATETIME (마지막 변경 시각)
+--       · 7일 쿨다운 (Service 레이어 검증)
+--       · 가입 후 첫 1회 변경은 쿨다운 예외 — nickname_changed_at IS NULL
+--       · 운영자 강제 변경은 audit_log 로 기록하고 nickname_changed_at 갱신 X
+--         (다음 유저 변경 쿨다운에 영향 없음)
+--
+--   (Y) 채팅방 닉네임 스냅샷 (채팅방 생성 당시 닉네임 고정):
+--       · match_chat_room.user_a_display_name, user_b_display_name
+--       · post_chat_room.owner_display_name, partner_display_name
+--       · 닉네임이 바뀌어도 기존 채팅방의 표시 이름은 불변
+--       · 새 채팅방은 생성 시점의 최신 닉네임으로 스냅샷
+--
+--   (Z) 보안 정책 (애플리케이션 레벨, DDL 변경 없음 — 설계서 참조):
+--       · iOS: UIScreen.isCaptured 감지 시 민감화면 블러/블랙 오버레이
+--       · Android: FLAG_SECURE 앱 전체 적용 → 스크린샷/녹화 원천 차단
+--       · 워터마크: "EF · {viewer_uuid8} → {target_uuid8} · yyyy.MM.dd HH:mm"
+--       · 스크린샷 감지 로그 테이블은 불필요 (원천 차단이라 감지 이벤트 자체가 없음)
+--
+-- v1.4 → v1.5 변경 사항 (매칭 성공 UX 플로우 반영)
+--   (T) 매칭 성공 팝업 · "채팅하기/둘러보기" UX 를 위한 컬럼 신설:
+--       · match_results.popup_shown_a — user_a 가 팝업을 본 시각
+--       · match_results.popup_shown_b — user_b 가 팝업을 본 시각
+--       → 앱 진입 시 popup_shown_X=NULL 인 match_results 가 있으면
+--         팝업을 띄우고, '둘러보기' 눌러도 해당 시각을 기록하여 재노출 방지.
+--       → '채팅하기' 눌러 채팅방 진입한 경우에도 팝업은 본 것으로 간주.
+--
+--   (U) 매칭 채팅방 lazy 생성 플로우 반영:
+--       · 신규 테이블 match_chat_room     — 매칭 전용 1:1 채팅방
+--       · 신규 테이블 match_chat_message  — 매칭 전용 채팅 메시지
+--       · "채팅방 진입만 해서는 생성되지 않고 첫 메시지를 전송할 때
+--          비로소 room 이 생성된다" 규칙을 Service 레이어에서 강제.
+--       · match_results.chat_room_id 는 first message 전송 순간 채워짐.
+--       · 포스트잇 채팅(post_chat_room/message)과 구분 유지 — 도메인 분리.
+--
+--   (V) 파워메시지(match_message_log) 와 매칭 성사 이후 채팅의 관계:
+--       · 파워메시지는 매칭 전 단계에서 사용 → match_message_log 유지
+--       · 매칭 성사 후에는 match_chat_message 사용
+--       · 수신자가 파워메시지에 응답하면 자동 매칭 → match_chat_room 생성
+--         (파워메시지 본문은 첫 메시지로 chat_message 에 복제)
+--
+-- v1.3 → v1.4 변경 사항 (COMMENT 전면 커버리지)
+--   (S) 모든 테이블(37개)과 모든 컬럼(377개)에 COMMENT 100% 적용
+--       · BaseEntity 공통 컬럼(id, create_time, update_time, create_user,
+--         update_user)도 모두 일관된 문구로 붙임
+--       · FK / 도메인 특화 컬럼은 의미를 구체적으로 설명
+--       · Generated Column, @Version, 트리거 관리 컬럼 등은 특이 사항 명시
+--       · MariaDB SHOW CREATE TABLE / INFORMATION_SCHEMA 조회 시 스키마만
+--         보고도 의미 파악 가능
+--       · 실행 오류 0건, information_schema.COLUMNS COMMENT 커버리지 100%
+--
+-- v1.2 → v1.3 변경 사항 (푸시 알림 도메인 추가)
+--   (N) device_token           — FCM 디바이스 토큰 관리 (플랫폼별/다기기)
+--   (O) notification_log       — 발송된 알림 이력 (멱등키, 재시도, 읽음)
+--   (P) notification_setting   — 유저별 알림 수신 선호 (타입별 on/off + 방해금지)
+--   (Q) 매칭 전체 이벤트에 알림 훅 — Service 에서 NotificationService.send(...)
+--       호출하는 위치를 시퀀스 문서에 명시 (설계서 Part 4 참고)
+--   (R) 새 ErrorCode: DEVICE_TOKEN_INVALID, NOTIFICATION_SEND_FAILED
+--
+-- v1.1 → v1.2 변경 사항 (MariaDB 10.11+ 호환성 실전 검증 결과 반영)
+--   (K) "자기 참조 금지" CHECK 제약 제거 (MariaDB 파서 엣지 케이스 회피):
+--       · match_pool.chk_pool_not_self      (user_id   <> target_id)
+--       · match_actions.chk_action_not_self (actor_id  <> target_id)
+--       · match_message_log.chk_mml_not_self(sender_id <> receiver_id)
+--       · user_blocks.chk_block_not_self    (blocker_id<> blocked_id)
+--       · profile_visit.chk_visit_not_self  (visitor_id<> visited_id)
+--       · post_chat_room.chk_room_not_self  (post_owner_id <> partner_id)
+--       → 실제로 ENUM + JSON + DATETIME DEFAULT CURRENT_TIMESTAMP + 복합 PK
+--         조합 하에서 MariaDB 10.11 이 CHECK 절의 컬럼을 함수로 오인하는
+--         ER 1901 이 발생. 애플리케이션 불변식이므로 Service 레이어에서 검증
+--         (ErrorCode.SELF_ACTION_FORBIDDEN 등 으로 명확한 에러 반환 가능).
+--   (L) match_results.chk_match_order (user_a_id < user_b_id) 도 위 이슈로
+--       제거. 페어 정렬은 트리거와 서비스의 LEAST/GREATEST 로 강제.
+--   (M) 최종본은 MariaDB 10.11 에서 전체 실행 오류 0 으로 검증 완료.
+--
+-- v1.0 → v1.1 변경 사항 (설계서 1.5.1 / 1.5.2 반영)
+--   (A) bal_game.total_count → Generated Column 으로 a_count + b_count 자동 계산
+--       · 투표 수정 시 동기화 누락으로 인한 카운트 꼬임 방지
+--   (B) bal_game_comment 에 report_count / is_hidden 추가 (10회 누적 자동 숨김)
+--   (C) bal_name_map 에 (game_id, nickname) UNIQUE 추가 (게임별 닉네임 유일성)
+--   (D) report 에 (target_type, target_id_long, reporter_id) UNIQUE 추가
+--       (target_uuid 대상은 별도 UNIQUE) — 동일 대상 중복 신고 방지
+--   (E) match_actions 의 UNIQUE(actor_id, target_id) 는 유지하되 MESSAGE 는
+--       별도 match_message_log 테이블로 분리(선제 메시지 여러 번 전송 가능성 대비)
+--   (F) match_results 에 user_a_id < user_b_id CHECK + 정렬 저장 원칙
+--   (G) post_it 의 is_lightning 플래그는 유지하되 category.code 와의
+--       일관성을 보장하는 서비스 레이어 규칙을 주석으로 명시
+--   (H) 광고 보상 일일 상한: ad_reward_log 테이블 신설
+--   (I) audit_log (관리자 액션 감사용), shedlock (스케줄러 중복 실행 방지) 신설
+--   (J) 모든 외래키에 ON UPDATE CASCADE 명시, FK 명명 규칙 통일
+--
+-- 용어
+--   BaseEntity = (create_time, update_time, create_user, update_user)
+--   Soft delete = is_deleted 플래그 사용. 물리 삭제는 배치에서만.
+-- ============================================================================
+
+
+-- ============================================================================
+-- [0. 공통]
+-- ============================================================================
+
+CREATE DATABASE IF NOT EXISTS ef_db
+    DEFAULT CHARACTER SET utf8mb4
+    DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE ef_db;
+
+
+-- ----------------------------------------------------------------------------
+-- 0-1. users — 유저 기본 정보
+-- ----------------------------------------------------------------------------
+--   · 내부 조인은 PK(id, BIGINT) 사용, 외부 노출은 uuid(CHAR 36) 사용
+--   · is_withdraw=TRUE 는 탈퇴한 계정. 물리 삭제 대신 상태 플래그로 관리하여
+--     다형성 참조(report, match_actions 등)의 무결성을 지킨다.
+--   · last_login_time 은 매칭 "최근 접속자 순 폴백" 정렬에 사용 → 인덱스 필수
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id               BIGINT       AUTO_INCREMENT PRIMARY KEY
+                                   COMMENT '내부 PK (조인/FK 대상)',
+    uuid             CHAR(36)     NOT NULL
+                                   COMMENT '외부 식별번호 (URL/API 노출용 UUIDv4)',
+    login_id         VARCHAR(50)  NOT NULL COMMENT '로그인 ID',
+    password         VARCHAR(255) NOT NULL COMMENT 'BCrypt 해시 (strength 10~12)',
+    phone            VARCHAR(20)  NOT NULL COMMENT '전화번호 (E.164 권장)',
+    scode            VARCHAR(4)   NOT NULL COMMENT '특수코드 (동명이인 구분용 4자리)',
+    nickname         VARCHAR(30)  NOT NULL COMMENT '공개 닉네임 (UNIQUE)',
+    nickname_changed_at DATETIME  DEFAULT NULL
+                                   COMMENT '마지막 닉네임 변경 시각 (NULL=가입 후 미변경, 첫 변경은 쿨다운 예외. 7일 쿨다운 Service 검증)',
+    age              INT          NOT NULL COMMENT '나이 (매칭 이상형 필터용)',
+    job              VARCHAR(30)  NOT NULL COMMENT '직업 코드 (ENUM 문자열)',
+    is_withdraw      BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '탈퇴 여부',
+    withdraw_date    DATETIME     DEFAULT NULL COMMENT '탈퇴 일시',
+
+    -- [v2.1] 유저 제재 상태 (빠른 로그인 차단 판정용)
+    --   user_suspension 테이블에 상세 이력이 있으므로 여기선 현재 상태만 저장
+    --   ACTIVE=정상 / WARNING=경고(제한 없음) / TEMP_SUSPENDED=일시정지 / PERMANENTLY_SUSPENDED=영구정지
+    --   변경: AdminSuspensionService 가 user_suspension INSERT 후 이 컬럼도 같이 UPDATE
+    --   7일/30일 구분은 user_suspension.ends_at 으로 판단 (이 컬럼은 상태만)
+    status           ENUM('ACTIVE', 'WARNING', 'TEMP_SUSPENDED', 'PERMANENTLY_SUSPENDED')
+                                  NOT NULL DEFAULT 'ACTIVE'
+                                  COMMENT '유저 현재 상태.
+                                          ACTIVE=정상,
+                                          WARNING=경고(서비스 이용 가능, 누적 시 정지),
+                                          TEMP_SUSPENDED=일시정지(7일/30일 — ends_at 은 user_suspension 참조),
+                                          PERMANENTLY_SUSPENDED=영구정지.
+                                          로그인 필터에서 TEMP/PERMANENTLY_SUSPENDED 차단.
+                                          상세 이력은 user_suspension 테이블 참조',
+    area_id          BIGINT       NOT NULL COMMENT '지역 식별자 (area 마스터 FK 대상, 별도 관리)',
+    last_login_time  DATETIME     DEFAULT NULL COMMENT '마지막 로그인 시각',
+    -- [v1.8] role 컬럼 제거 — 관리자는 admin_account 테이블로 완전 분리됨
+    -- [v1.7] 휴대폰 PASS 본인인증
+    verified_birth_date   DATE     DEFAULT NULL
+                                   COMMENT 'PASS 인증으로 획득한 생년월일 (만 14세 미만 차단용)',
+    identity_verified_at  DATETIME DEFAULT NULL
+                                   COMMENT '본인인증 완료 시각 (NULL=미인증, 재인증 시 갱신)',
+
+    -- BaseEntity
+    create_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                  ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user      BIGINT       DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user      BIGINT       DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT uk_users_uuid     UNIQUE (uuid),
+    CONSTRAINT uk_users_login_id UNIQUE (login_id),
+    CONSTRAINT uk_users_phone    UNIQUE (phone),
+    CONSTRAINT uk_users_nickname UNIQUE (nickname),
+    INDEX idx_users_last_login  (last_login_time)
+        COMMENT '매칭 후보 부족 시 최근 접속자 순 폴백 정렬',
+    INDEX idx_users_active      (is_withdraw)
+        COMMENT '활성 유저 필터링 (배치용). v1.8 에서 role 컬럼 제거됨',
+    INDEX idx_users_status      (status)
+        COMMENT '일시정지/영구정지 유저 필터 (배치 자동 해제, 관리자 목록 조회)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 기본 정보';
+
+
+-- ----------------------------------------------------------------------------
+-- 0-2. categories — 통합 카테고리 (밸런스게임 / 포스트잇 공용)
+-- ----------------------------------------------------------------------------
+--   · code 로 서비스 레이어에서 식별 (예: POST_LIGHTN 은 번개)
+--   · type 으로 노출 도메인 구분 (밸런스 / 포스트잇 / 공용)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS categories (
+    id    INT          AUTO_INCREMENT PRIMARY KEY COMMENT '카테고리 PK',
+    code  VARCHAR(20)  NOT NULL COMMENT '카테고리 코드 (예: BAL_LOVE, POST_LIGHTN)',
+    name  VARCHAR(50)  NOT NULL COMMENT '표시명',
+    type  ENUM('POST_IT', 'BALANCE', 'COMMON') NOT NULL DEFAULT 'COMMON' COMMENT '사용 도메인 (POST_IT/BALANCE/COMMON)',
+
+    CONSTRAINT uk_categories_code UNIQUE (code),
+    INDEX idx_categories_type (type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스/포스트잇 공용 카테고리 마스터';
+
+
+-- ----------------------------------------------------------------------------
+-- 0-3. report — 통합 신고 테이블 (다형성)
+-- ----------------------------------------------------------------------------
+--   · 포스트잇 글, 밸런스게임 댓글, 프로필, 채팅 대상 신고 통합 저장
+--   · target_type 에 따라 target_id_long 또는 target_uuid 를 사용
+--     (POST_IT / BAL_COMMENT → long, PROFILE / CHAT → uuid)
+--   · 다형성 관계라 target 쪽 물리적 FK 는 걸지 않음 (ORM 에서 polymorphic 처리)
+--   · [v1.1 추가] 중복 신고 방지 UNIQUE — 서비스 레이어에서 catch 후 ALREADY_REPORTED 반환
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS report (
+    id             BIGINT        AUTO_INCREMENT PRIMARY KEY COMMENT '신고 PK',
+    target_type    ENUM('POST_IT', 'BAL_COMMENT', 'PROFILE', 'CHAT') NOT NULL
+                                 COMMENT '신고 대상 도메인',
+    -- [v2.0] target_id_long 제거. 모든 엔티티가 uuid 보유하므로 통일
+    target_uuid    CHAR(36)      NOT NULL COMMENT '신고 대상 UUID (POST_IT/BAL_COMMENT/PROFILE/CHAT 공통)',
+    reporter_id    BIGINT        DEFAULT NULL
+                                 COMMENT '신고자 (탈퇴 시 FK SET NULL 동작으로 NULL 유지. 신고 이력은 계속 보존)',
+    reason         VARCHAR(255)  DEFAULT NULL COMMENT '신고 사유 (선택, 자유 텍스트 최대 255자)',
+    status         ENUM('PENDING', 'PROCESSED', 'DISMISSED') NOT NULL DEFAULT 'PENDING'
+                                 COMMENT '처리 상태 (PENDING=대기/PROCESSED=처리됨/DISMISSED=기각)',
+
+    -- [v2.0] 관리자 처리 추적
+    admin_processed_by  BIGINT   DEFAULT NULL
+                                 COMMENT '처리한 관리자 admin_account.id. 관리자 비활성화 시 SET NULL',
+    admin_processed_at  DATETIME DEFAULT NULL COMMENT '관리자 처리 시각',
+
+    -- [v2.0] 제재 연결 (신고 → 제재 발생 시 역참조)
+    resulted_suspension_id BIGINT DEFAULT NULL
+                                  COMMENT '이 신고로 이어진 제재 user_suspension.id. 
+                                          "대표 신고 1건 + 누적 카운트" 정책에서 대표 신고만 연결.
+                                          제재가 해제되어도 본 컬럼은 그대로 유지',
+
+    -- BaseEntity
+    create_time    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user    BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user    BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_report_reporter
+        FOREIGN KEY (reporter_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    -- [v2.0] fk_report_admin_processor 는 스키마 끝 [12. 후처리 FK] 에서 ALTER 로 추가
+    --   (admin_account 가 뒤에 정의되므로)
+
+    -- [v2.0] 중복 신고 방지 (동일 신고자가 같은 대상을 두 번 신고 불가)
+    --   reporter_id 가 NULL(탈퇴)인 경우 UNIQUE 비교에서 제외되므로 무해함
+    CONSTRAINT uk_report_target_reporter
+        UNIQUE (target_type, target_uuid, reporter_id),
+
+    INDEX idx_report_target         (target_type, target_uuid),
+    INDEX idx_report_status_time    (status, create_time)
+        COMMENT '관리자 처리 대기 목록 조회',
+    INDEX idx_report_reporter_type  (reporter_id, target_type)
+        COMMENT '내 신고 이력 (댓글 조회 시 NOT IN 필터용)',
+    INDEX idx_report_admin_processor (admin_processed_by)
+        COMMENT '관리자별 처리 건수 집계용'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='다형성 신고 (v2.0: target_uuid 통일, 관리자 처리 추적, resulted_suspension_id 역참조)';
+
+
+
+-- ============================================================================
+-- [1. 유료화 시스템]
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 1-1. item_catalog — 아이템 마스터
+-- ----------------------------------------------------------------------------
+--   · 별(star) 로 구매하는 소모성/지속형 아이템의 가격·지속시간 관리
+--   · effect_duration_min 이 NULL 이면 즉시 소모형 (선제 메시지 등)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS item_catalog (
+    id                  INT           AUTO_INCREMENT PRIMARY KEY COMMENT '아이템 PK',
+    item_code           VARCHAR(40)   NOT NULL
+                                       COMMENT 'POST_PIN, PROFILE_BOOST, SUPER_LIKE, PRE_MESSAGE, UNDO 등',
+    name                VARCHAR(100)  NOT NULL COMMENT '아이템 표시명',
+    description         VARCHAR(255)  DEFAULT NULL COMMENT '아이템 설명 (선택)',
+    star_cost           INT           NOT NULL COMMENT '별 소모량',
+    category            ENUM('POST_IT', 'MATCH', 'COMMON') NOT NULL COMMENT '사용처 구분 (POST_IT/MATCH/COMMON)',
+    effect_duration_min INT           DEFAULT NULL
+                                       COMMENT '효과 지속 분. 부스터 30, 글 상단고정 60, NULL=즉시',
+    is_active           BOOLEAN       NOT NULL DEFAULT TRUE COMMENT '판매·노출 여부 (FALSE=비활성)',
+
+    create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                       ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user         BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user         BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT uk_item_code UNIQUE (item_code),
+    CONSTRAINT chk_item_star_cost CHECK (star_cost >= 0),
+    INDEX idx_item_category_active (category, is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='별로 구매하는 아이템 마스터';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-2. subscription_plan — 구독 플랜 마스터
+-- ----------------------------------------------------------------------------
+--   · monthly_free_items JSON 에 월간 무료 사용 횟수 (코드→횟수) 저장
+--     예: {"SUPER_LIKE": 5, "PROFILE_BOOST": 1, "PRE_MESSAGE": 3}
+--     의미: "이 플랜은 이 아이템들을 월 N회까지 무료로 쓸 수 있음"
+--     미사용 시 소멸 (다음 달 1일에 카운터 리셋, user_monthly_usage 에서 재계산)
+--   · benefits JSON 에 플래그성 혜택 저장
+--     예: {"unlimited_post": true, "unlimited_reply": true, 
+--          "post_keep_days": 3, "see_all_likes": true,
+--          "see_visit_history": true, "daily_pick": true,
+--          "unlimited_rewind": true, "unlimited_chat_cancel": true}
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscription_plan (
+    id                  INT           AUTO_INCREMENT PRIMARY KEY COMMENT '플랜 PK',
+    plan_code           VARCHAR(20)   NOT NULL COMMENT 'BASIC, PREMIUM, VIP',
+    name                VARCHAR(50)   NOT NULL COMMENT '플랜 표시명 (예: 프리미엄)',
+    price               DECIMAL(10,2) NOT NULL COMMENT '월 구독료 (KRW)',
+    duration_days       INT           NOT NULL DEFAULT 30 COMMENT '구독 유지 일수 (기본 30일)',
+    monthly_free_items  JSON          DEFAULT NULL
+                                       COMMENT '월간 무료 사용 횟수 (item_code→count). 
+                                               예: {"SUPER_LIKE":5,"PROFILE_BOOST":1,"PRE_MESSAGE":3}.
+                                               user_monthly_usage 와 대조해 무료 한도 체크',
+    benefits            JSON          DEFAULT NULL
+                                       COMMENT '플래그성 혜택 (key→bool/int). 
+                                               예: {"unlimited_post":true,"post_keep_days":3}',
+    is_active           BOOLEAN       NOT NULL DEFAULT TRUE COMMENT '판매 중 여부',
+
+    create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                       ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user         BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user         BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT uk_plan_code UNIQUE (plan_code),
+    CONSTRAINT chk_plan_price CHECK (price >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='구독 플랜 마스터 (v2.0: monthly_bonus_items → monthly_free_items 의미 명확화)';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-3. user_subscription — 유저별 구독 이력
+-- ----------------------------------------------------------------------------
+--   · [v2.0] PK 를 AUTO_INCREMENT 로 변경. 한 유저가 과거 구독 이력을 여러 건 가질 수 있음
+--   · 현재 활성 구독은 is_active=TRUE 행 1건만 (Service 검증)
+--   · 탈퇴 시 user_id SET NULL (구독·결제 이력 보존 원칙)
+--   · last_bonus_grant_at 은 월간 보너스 배치가 갱신
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_subscription (
+    id                  BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '구독 이력 PK',
+    user_id             BIGINT   DEFAULT NULL COMMENT '유저 FK (탈퇴 시 NULL, 이력은 유지)',
+    plan_id             INT      NOT NULL COMMENT '구독 플랜 FK',
+    started_at          DATETIME NOT NULL COMMENT '구독 시작 시각',
+    end_date            DATETIME NOT NULL COMMENT '구독 만료 시각',
+    last_bonus_grant_at DATETIME DEFAULT NULL COMMENT '마지막 월간 보너스 지급 시각 (배치 제어)',
+    auto_renew          BOOLEAN  NOT NULL DEFAULT TRUE COMMENT '자동 갱신 여부',
+    -- [v1.7] 프리미엄 혜택 한 번이라도 사용했는지 (환불 가능 여부 판정용)
+    any_feature_used    BOOLEAN  NOT NULL DEFAULT FALSE
+                                  COMMENT '프리미엄 혜택 1회라도 사용 시 TRUE. 환불 요청 시 FALSE + 7일 이내만 전액 환불 허용',
+    is_active           BOOLEAN  NOT NULL DEFAULT TRUE COMMENT '구독 활성 여부 (만료 시 FALSE). 동일 user_id 에 is_active=TRUE 는 1건만 허용 (Service 검증)',
+
+    create_time         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user         BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user         BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_sub_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+        -- [v2.0] 탈퇴 시 SET NULL — 구독 이력은 결제기록과 함께 보존
+    CONSTRAINT fk_sub_plan FOREIGN KEY (plan_id) REFERENCES subscription_plan(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        -- [v2.0] 플랜 삭제 금지 (플랜 변경 시 데이터 꼬임 방지)
+
+    INDEX idx_sub_user_active (user_id, is_active)
+        COMMENT '유저의 활성 구독 조회 (Service 에서 자주 사용)',
+    INDEX idx_sub_active_end (is_active, end_date)
+        COMMENT '만료 임박 구독 배치 스캔용',
+    INDEX idx_sub_bonus_due  (is_active, last_bonus_grant_at)
+        COMMENT '월간 보너스 지급 대상 탐색'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 구독 이력 (v2.0: PK를 AUTO_INCREMENT 로 변경, 탈퇴 시 user_id SET NULL)';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-4. user_star_balance — 유저 별 잔액
+-- ----------------------------------------------------------------------------
+--   · 잔액 변경은 항상 star_transaction 과 함께 트랜잭션으로 처리
+--   · balance < 0 방지 CHECK
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_star_balance (
+    user_id        BIGINT PRIMARY KEY COMMENT '유저 PK (1:1)',
+    balance        INT    NOT NULL DEFAULT 0 COMMENT '현재 별 잔액 (음수 불가)',
+    total_charged  INT    NOT NULL DEFAULT 0 COMMENT '누적 충전 (통계용)',
+    total_used     INT    NOT NULL DEFAULT 0 COMMENT '누적 사용 (통계용)',
+
+    create_time    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                            ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user    BIGINT DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user    BIGINT DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_star_balance_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT chk_balance_nonneg      CHECK (balance       >= 0),
+    CONSTRAINT chk_total_charged_nn    CHECK (total_charged >= 0),
+    CONSTRAINT chk_total_used_nn       CHECK (total_used    >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 별(재화) 잔액';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-5. star_transaction — 별 거래 내역
+-- ----------------------------------------------------------------------------
+--   · balance_after 는 감사(audit)용 — 계산 값이지만 보존
+--   · amount 는 부호 포함 (차감=음수, 적립=양수)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS star_transaction (
+    id            BIGINT        AUTO_INCREMENT PRIMARY KEY COMMENT '거래 로그 PK',
+    user_id       BIGINT        DEFAULT NULL COMMENT '유저 FK (탈퇴 시 NULL, 거래 이력은 보존)',
+    tx_type       ENUM('CHARGE', 'USE', 'REFUND', 'ADMIN_GRANT') NOT NULL COMMENT '거래 종류 (CHARGE/USE/REFUND/ADMIN_GRANT)',
+    amount        INT           NOT NULL COMMENT '+ 적립 / - 차감',
+    balance_after INT           NOT NULL COMMENT '거래 직후 잔액',
+    ref_type      VARCHAR(30)   DEFAULT NULL COMMENT 'PAYMENT | ITEM_USE | AD_REWARD | ADMIN_GRANT',
+    ref_id        BIGINT        DEFAULT NULL COMMENT '원인 레코드 PK (ITEM_USE 면 item_catalog.id)',
+    memo          VARCHAR(255)  DEFAULT NULL COMMENT '메모 (선택)',
+
+    create_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user   BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_star_tx_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+        -- [v2.0] CASCADE → SET NULL: 거래 이력은 법령상 5년 보관 의무
+    CONSTRAINT chk_star_tx_balance_after CHECK (balance_after >= 0),
+
+    INDEX idx_star_tx_user_time (user_id, create_time DESC),
+    INDEX idx_star_tx_ref       (ref_type, ref_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='별 충전/사용/환불/지급 전체 원장 (v2.0: 탈퇴 시 user_id SET NULL)';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-6. [v2.0 삭제] user_inventory 테이블 제거
+-- ----------------------------------------------------------------------------
+--   · 프리미엄 월간 보너스 = "카운터 방식" (미사용 시 소멸) 정책 확정
+--   · 인벤토리 방식 불필요 — user_monthly_usage + subscription_plan.monthly_free_items 로 대체
+--   · 비구독자에게 아이템 지급 시에는 별로 대체 지급 (별도 인벤토리 없음)
+-- ----------------------------------------------------------------------------
+
+
+-- ----------------------------------------------------------------------------
+-- 1-7. [v2.0 삭제] user_item_usage 테이블 제거
+-- ----------------------------------------------------------------------------
+--   · 별 소비 이력은 이미 star_transaction 에 기록 (ref_type='ITEM_USE', ref_id=item_catalog.id)
+--   · "현재 활성 중인 효과"(부스터 30분 등) 는 user_profile.booster_until 등 
+--     도메인 컬럼으로 판단 (필요 시 각 프로필/채팅방에 임시 플래그)
+--   · 별도 테이블 중복 제거로 관리 단순화
+-- ----------------------------------------------------------------------------
+
+
+-- ----------------------------------------------------------------------------
+-- 1-6b. user_monthly_usage — 프리미엄 월간 무료 사용 카운터  ★ v2.0 신규
+-- ----------------------------------------------------------------------------
+--   · 프리미엄 유저의 "월 N회 무료" 아이템 사용 횟수 추적
+--     예: PROFILE_BOOST 월 1회, SUPER_LIKE 월 5회, PRE_MESSAGE 월 3회
+--   · 월 1일 기준 자동 리셋 (period_start = DATE_FORMAT(NOW(), '%Y-%m-01'))
+--   · 비구독자는 기록 대상 아님 (비구독자는 무조건 별 차감)
+--   · 보존: 12개월 후 배치 DELETE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_monthly_usage (
+    user_id        BIGINT      NOT NULL COMMENT '유저 FK (복합 PK)',
+    period_start   DATE        NOT NULL COMMENT '월간 기준일 (매월 1일, YYYY-MM-01)',
+    feature_code   VARCHAR(30) NOT NULL COMMENT '아이템 코드 (PROFILE_BOOST/SUPER_LIKE/PRE_MESSAGE 등)',
+    used_count     INT         NOT NULL DEFAULT 0 COMMENT '이번 달 사용 횟수',
+
+    create_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '첫 사용 시각 (BaseEntity)',
+    update_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP COMMENT '최근 사용 시각 (BaseEntity)',
+
+    PRIMARY KEY (user_id, period_start, feature_code),
+    CONSTRAINT fk_monthly_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT chk_monthly_used_count CHECK (used_count >= 0),
+
+    INDEX idx_monthly_period (period_start)
+        COMMENT '월별 통계 / 12개월 후 DELETE 배치용'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='프리미엄 월간 무료 사용 카운터 (v2.0 신규). 비구독자는 기록 안 함';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-8. payment_logs — 결제 로그 (구독/별 충전 통합)
+-- ----------------------------------------------------------------------------
+--   · order_id 는 PG 주문번호 = 멱등 키 (중복 처리 방지)
+--   · status 전이: PENDING → SUCCESS | FAILED → REFUNDED
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS payment_logs (
+    id             BIGINT        AUTO_INCREMENT PRIMARY KEY COMMENT '결제 로그 PK',
+    user_id        BIGINT        DEFAULT NULL COMMENT '결제자 user FK (탈퇴 시 NULL, 5년 보관)',
+    order_id       VARCHAR(100)  NOT NULL COMMENT 'PG 주문번호 (멱등 키)',
+    payment_type   ENUM('SUBSCRIPTION', 'STAR_CHARGE') NOT NULL COMMENT '결제 종류 (SUBSCRIPTION=구독/STAR_CHARGE=별충전)',
+    ref_plan_id    INT           DEFAULT NULL COMMENT '구독 결제 시 플랜 FK (플랜 삭제 시 NULL)',
+    star_amount    INT           DEFAULT NULL COMMENT '별 충전 시 지급된 별 개수',
+    amount         DECIMAL(10,2) NOT NULL COMMENT '결제 금액 (DECIMAL)',
+    currency       CHAR(3)       NOT NULL DEFAULT 'KRW' COMMENT '통화 코드 (기본 KRW)',
+    pg_provider    VARCHAR(30)   DEFAULT NULL COMMENT '토스/카카오페이 등',
+    status         ENUM('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED')
+                                 NOT NULL DEFAULT 'PENDING' COMMENT '결제 상태 (PENDING→SUCCESS|FAILED→REFUNDED)',
+    paid_at        DATETIME      DEFAULT NULL COMMENT '결제 완료 시각',
+    refunded_at    DATETIME      DEFAULT NULL COMMENT '환불 시각 (환불 시에만)',
+    -- [v1.7] 환불 상세
+    refund_type    ENUM('FULL', 'PARTIAL', 'SYSTEM_ERROR') DEFAULT NULL
+                                 COMMENT '환불 유형 (FULL=전액, PARTIAL=부분, SYSTEM_ERROR=시스템오류)',
+    refund_reason  VARCHAR(500)  DEFAULT NULL COMMENT '환불 사유 (고객 요청 / 오류 등)',
+
+    create_time    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user    BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user    BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT uk_payment_order UNIQUE (order_id),
+    CONSTRAINT fk_pay_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+        -- [v2.0] SET NULL: 전자상거래법 5년 보관 의무
+    CONSTRAINT fk_pay_plan FOREIGN KEY (ref_plan_id) REFERENCES subscription_plan(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+        -- [v2.0] SET NULL: 플랜 변경/폐기 시에도 결제 기록은 유지
+    CONSTRAINT chk_pay_amount_pos CHECK (amount >= 0),
+
+    INDEX idx_pay_user_time   (user_id, create_time DESC),
+    INDEX idx_pay_status_time (status, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='결제 로그 (v2.0: 탈퇴 시 user_id SET NULL, 플랜 삭제 시 ref_plan_id SET NULL)';
+
+
+-- ----------------------------------------------------------------------------
+-- 1-9. user_daily_usage — 일일 사용량 카운터
+-- ----------------------------------------------------------------------------
+--   · 무료 한도 체크 (글쓰기 2/일, 답장 5/일, 번개 1/일, 되돌리기 1/일)
+--   · INSERT ... ON DUPLICATE KEY UPDATE used_count = used_count + 1 로 원자 증가
+--   · action_type 예시:
+--       POST_WRITE, POST_REPLY, POST_LIGHTNING, MATCH_UNDO, AD_REWARD_REPLY
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_daily_usage (
+    user_id       BIGINT      NOT NULL COMMENT '유저 FK',
+    usage_date    DATE        NOT NULL COMMENT '사용 일자 (KST 기준)',
+    action_type   VARCHAR(40) NOT NULL COMMENT '액션 종류 (POST_WRITE/POST_REPLY/POST_LIGHTNING/MATCH_UNDO 등)',
+    used_count    INT         NOT NULL DEFAULT 0 COMMENT '사용 횟수 (UPSERT)',
+
+    create_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+
+    PRIMARY KEY (user_id, usage_date, action_type),
+    CONSTRAINT fk_daily_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT chk_daily_used_nn CHECK (used_count >= 0),
+
+    INDEX idx_daily_date (usage_date) COMMENT '오래된 데이터 삭제 배치용'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='일일 사용량 카운터 (무료 한도 체크)';
+
+
+-- ----------------------------------------------------------------------------
+-- [v1.1 신규] 1-10. ad_reward_log — 광고 시청 보상 로그
+-- ----------------------------------------------------------------------------
+--   · "광고 보고 답장권 1개 얻기" 같은 보상을 기록
+--   · 악용 방지: (user_id, reward_date, reward_type) 당 일일 최대치는
+--     서비스 단에서 확인하며, 이 테이블로 근거를 남긴다
+--   · reward_type: AD_REPLY_TICKET (답장권), AD_STAR (별 소량) 등
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ad_reward_log (
+    id             BIGINT      AUTO_INCREMENT PRIMARY KEY COMMENT '광고 보상 로그 PK',
+    user_id        BIGINT      NOT NULL COMMENT '보상 수령 유저 FK',
+    reward_type    VARCHAR(40) NOT NULL
+                               COMMENT 'AD_REPLY_TICKET | AD_STAR | AD_UNDO ...',
+    reward_amount  INT         NOT NULL DEFAULT 1 COMMENT '보상 수량 (기본 1)',
+    reward_date    DATE        NOT NULL COMMENT '보상 일자 (KST 기준)',
+    ad_network     VARCHAR(30) DEFAULT NULL COMMENT 'admob/meta/etc',
+    ad_tx_id       VARCHAR(100) DEFAULT NULL COMMENT '광고 SDK 트랜잭션 ID (멱등성)',
+
+    create_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user    BIGINT      DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_ad_reward_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- 동일 광고 트랜잭션의 이중 보상 방지
+    CONSTRAINT uk_ad_reward_tx UNIQUE (ad_tx_id),
+
+    INDEX idx_ad_reward_user_date (user_id, reward_date, reward_type)
+        COMMENT '일일 보상 횟수 집계 (하루 상한 체크)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='광고 보상 로그 (악용 방지, 멱등)';
+
+
+
+-- ============================================================================
+-- [2. 매칭 시스템]
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 2-1. user_profile — 매칭용 상세 프로필 (1:1)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_profile (
+    user_id           BIGINT      PRIMARY KEY COMMENT '유저 PK (1:1)',
+    match_purpose     ENUM('FRIEND', 'LOVER', 'BOTH') NOT NULL DEFAULT 'BOTH' COMMENT '매칭 목적 (FRIEND=지인/LOVER=애인/BOTH=둘다)',
+    bio_message       VARCHAR(100) DEFAULT NULL COMMENT '매칭 카드 한줄',
+    mbti              CHAR(4)      DEFAULT NULL COMMENT 'MBTI 4글자 (INTJ, ENFP 등)',
+    drinking          ENUM('NONE', 'SOMETIMES', 'OFTEN') DEFAULT NULL COMMENT '음주 (NONE/SOMETIMES/OFTEN)',
+    smoking           ENUM('NONE', 'SOMETIMES', 'OFTEN') DEFAULT NULL COMMENT '흡연 (NONE/SOMETIMES/OFTEN)',
+    tattoo            ENUM('NONE', 'SMALL', 'BIG')       DEFAULT NULL COMMENT '타투 (NONE/SMALL/BIG)',
+    height            INT          DEFAULT NULL COMMENT 'cm',
+    hair_style        VARCHAR(20)  DEFAULT NULL COMMENT '내 머리 스타일',
+    body_type         VARCHAR(20)  DEFAULT NULL COMMENT '내 체형',
+    important_factor  TEXT         DEFAULT NULL COMMENT '중요 가치관 자유 텍스트',
+    -- [v1.7] main_photo_url 제거 — user_photo 테이블의 is_main=TRUE 로 대체
+    -- 프로필 부스터 만료 시각 (스케줄러가 NOW()<boost_expires_at 만 활성으로 취급)
+    boost_expires_at  DATETIME     DEFAULT NULL COMMENT '프로필 부스터 만료 시각 (NOW 보다 미래면 활성)',
+
+    -- [v2.1] 프로필 심사 (관리자 검토)
+    --   신규 가입 / 사진·소개 수정 후 관리자 승인 전까지 매칭 피드 미노출
+    --   PENDING=심사 대기 / APPROVED=승인(매칭 정상) / REJECTED=반려(재제출 요청)
+    profile_status    ENUM('PENDING', 'APPROVED', 'REJECTED')
+                                   NOT NULL DEFAULT 'PENDING'
+                                   COMMENT '프로필 심사 상태.
+                                           PENDING=심사 대기 (신규 가입·사진 변경 시 자동 전환),
+                                           APPROVED=승인 (매칭 피드 정상 노출),
+                                           REJECTED=반려 (유저에게 사유 안내 후 재제출 요청).
+                                           match_pool 계산 시 APPROVED 만 대상으로 함',
+    profile_rejected_reason VARCHAR(255) DEFAULT NULL
+                                   COMMENT '반려 사유 (REJECTED 일 때 유저에게 노출).
+                                           예: "프로필 사진이 규정에 맞지 않습니다",
+                                               "소개 내용에 연락처가 포함되어 있습니다"',
+    profile_reviewed_at  DATETIME  DEFAULT NULL
+                                   COMMENT '마지막 심사 시각 (승인·반려 모두 기록)',
+    profile_reviewed_by  BIGINT    DEFAULT NULL
+                                   COMMENT '심사한 관리자 admin_account.id (SET NULL 허용)',
+
+    create_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                   ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user       BIGINT       DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user       BIGINT       DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_profile_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- fk_profile_reviewer 는 admin_account 보다 user_profile 이 먼저 정의되므로
+    -- 스키마 끝 [12. 후처리 FK] 섹션에서 ALTER TABLE 로 추가
+    CONSTRAINT chk_profile_height CHECK (height IS NULL OR (height BETWEEN 100 AND 250)),
+
+    INDEX idx_profile_boost (boost_expires_at)
+        COMMENT '활성 부스터 유저 탐색',
+    INDEX idx_profile_update (update_time)
+        COMMENT '프로필 수정 기반 match_pool 재계산 트리거',
+    INDEX idx_profile_status (profile_status)
+        COMMENT '심사 대기 목록 조회 (관리자) / match_pool 에서 APPROVED 만 필터'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='매칭용 상세 프로필';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-2. user_interest — 유저 관심사 (N:M 다중값)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_interest (
+    user_id        BIGINT      NOT NULL COMMENT '유저 FK (복합 PK)',
+    interest_code  VARCHAR(30) NOT NULL COMMENT 'READING, GAME, TRAVEL ...',
+    create_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user    BIGINT      DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+
+    PRIMARY KEY (user_id, interest_code),
+    CONSTRAINT fk_interest_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    INDEX idx_interest_code (interest_code)
+        COMMENT '역방향 조회 (이 관심사를 가진 유저)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 관심사 (매칭 점수 계산 소스)';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-3. user_ideal — 유저 이상형 조건 (1:1)
+-- ----------------------------------------------------------------------------
+--   · 역매칭 (REVERSE) 쿼리:
+--     "이 유저가 이상형으로 여길 사람" = (ideal_height_min <= 내키 <= ideal_height_max)
+--   · ideal_hair_style 은 콤마 구분 (예: "SHORT,MEDIUM")
+--     서비스 단에서 FIND_IN_SET() 사용하거나 배열로 정규화 고려
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_ideal (
+    user_id               BIGINT      PRIMARY KEY COMMENT '유저 PK (1:1)',
+    ideal_age_min         INT         DEFAULT NULL COMMENT '이상형 최소 나이',
+    ideal_age_max         INT         DEFAULT NULL COMMENT '이상형 최대 나이',
+    ideal_height_min      INT         DEFAULT NULL COMMENT '이상형 최소 키 (cm)',
+    ideal_height_max      INT         DEFAULT NULL COMMENT '이상형 최대 키 (cm)',
+    ideal_hair_style      VARCHAR(100) DEFAULT NULL COMMENT '이상형 머리 스타일 (콤마 구분)',
+    ideal_body_type       VARCHAR(100) DEFAULT NULL COMMENT '이상형 체형 (콤마 구분)',
+    priority_weight       INT         NOT NULL DEFAULT 50
+                                       COMMENT '이상형 일치 가중치 0~100',
+
+    create_time           DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time           DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                      ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user           BIGINT      DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user           BIGINT      DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_ideal_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT chk_ideal_age    CHECK (ideal_age_min    IS NULL OR ideal_age_max    IS NULL OR ideal_age_min    <= ideal_age_max),
+    CONSTRAINT chk_ideal_height CHECK (ideal_height_min IS NULL OR ideal_height_max IS NULL OR ideal_height_min <= ideal_height_max),
+    CONSTRAINT chk_ideal_weight CHECK (priority_weight BETWEEN 0 AND 100)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 이상형 조건';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-4. match_pool — 매칭 점수 캐시
+-- ----------------------------------------------------------------------------
+--   · (user_id → target_id) 방향의 점수. 쌍방 저장 가능하므로 2행이 될 수 있음
+--   · 재계산 트리거: 새벽 배치 / 프로필 수정 / 조회시 on-the-fly
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS match_pool (
+    user_id        BIGINT   NOT NULL COMMENT '나',
+    target_id      BIGINT   NOT NULL COMMENT '매칭 후보',
+    match_type     ENUM('INTEREST', 'IDEAL', 'REVERSE', 'CRAZY') NOT NULL COMMENT '매칭 타입 (INTEREST=관심사/IDEAL=이상형/REVERSE=역매칭/CRAZY=크레이지)',
+    match_score    INT      NOT NULL DEFAULT 0 COMMENT '0~100',
+    matched_tags   JSON     DEFAULT NULL COMMENT '노출 태그 2~3개',
+    calculated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '점수 계산 시각 (profile 수정보다 오래되면 재계산)',
+
+    PRIMARY KEY (user_id, target_id),
+    CONSTRAINT fk_pool_user   FOREIGN KEY (user_id)   REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_pool_target FOREIGN KEY (target_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT chk_pool_score CHECK (match_score BETWEEN 0 AND 100),
+    -- [v1.2] chk_pool_not_self (user_id <> target_id) 는 MariaDB 파서 버그로
+    --        제거. Service 레이어에서 검증 (SELF_ACTION_FORBIDDEN)
+
+    INDEX idx_pool_user_score (user_id, match_score DESC)
+        COMMENT '매칭 화면 기본 쿼리'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='매칭 점수 캐시';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-5. match_actions — 매칭 액션 (스와이프)
+-- ----------------------------------------------------------------------------
+--   · LIKE / PASS / SUPER_LIKE 만 (actor→target) 페어당 1행 UNIQUE
+--   · MESSAGE(선제 메시지)는 여러 번 보낼 수 있으므로 별도 테이블로 분리 (2-5b)
+--   · 되돌리기(PASS 취소): DELETE 후 필요 시 재INSERT (4초 이내)
+--   · PASS 30일 재매칭 금지: expires_at 활용
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS match_actions (
+    id            BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '액션 PK',
+    actor_id      BIGINT   NOT NULL COMMENT '액션 주체 user FK',
+    target_id     BIGINT   NOT NULL COMMENT '액션 대상 user FK',
+    action_type   ENUM('LIKE', 'PASS', 'SUPER_LIKE', 'PRE_MESSAGE') NOT NULL
+                           COMMENT 'LIKE | PASS | SUPER_LIKE (유료) | PRE_MESSAGE (유료 파워메시지). 
+                                   v2.0: match_message_log 삭제로 PRE_MESSAGE 편입',
+    -- [v2.0] is_read 제거 — 슈퍼좋아요는 3일간 전용 창에 노출 (create_time 기준 필터)
+    expires_at    DATETIME DEFAULT NULL
+                           COMMENT 'PASS: now()+30일 / 기타 NULL',
+
+    create_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                           ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user   BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user   BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_action_actor  FOREIGN KEY (actor_id)  REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_action_target FOREIGN KEY (target_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- [v2.0] UNIQUE(actor_id, target_id) 제거 — PRE_MESSAGE 가 포함되면서 같은 페어에 여러 액션 가능
+    --        대신 action_type 별 Service 검증으로 중복 방지
+    INDEX idx_action_actor_type    (actor_id, action_type, create_time DESC),
+    INDEX idx_action_target_lookup (target_id, action_type, create_time DESC)
+        COMMENT '"나를 좋아한 사람" / "받은 슈퍼좋아요 3일간 노출" 조회',
+    INDEX idx_action_expires       (expires_at)
+        COMMENT 'PASS 쿨타임 만료 배치용',
+    INDEX idx_action_pair          (actor_id, target_id, action_type)
+        COMMENT '페어+타입 조회 (Service 중복 체크)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='매칭 액션 (v2.0: PRE_MESSAGE 편입, is_read 제거, UNIQUE 제약 제거)';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-5b. [v2.0 삭제] match_message_log 테이블 제거
+-- ----------------------------------------------------------------------------
+--   · 파워메시지는 match_actions (action_type='PRE_MESSAGE') 로 통합
+--   · 메시지 본문은 chat_message 에 저장 (파워메시지 발송 시 chat_room 즉시 생성)
+--   · chat_room.match_result_id = NULL 상태가 파워메시지 응답 대기 중임을 나타냄
+-- ----------------------------------------------------------------------------
+
+
+-- ----------------------------------------------------------------------------
+-- 2-6. match_results — 매칭 성사 결과
+-- ----------------------------------------------------------------------------
+--   · 성사 조건 3가지 (trigger_type 으로 구분):
+--     - MUTUAL_LIKE        : 양방향 LIKE/SUPER_LIKE
+--     - PRE_MESSAGE_REPLY  : 파워메시지 받은 유저가 답장 → 매칭 성사
+--     - PRE_MESSAGE_LIKE   : 파워메시지 받은 유저가 매칭 피드에서 LIKE
+--   · 페어 순서: 항상 user_a_id < user_b_id 로 저장 (LEAST/GREATEST)
+--   · [v2.0] PK: CHAR(36) UUID → BIGINT AUTO_INCREMENT (내부 PK)
+--     uuid 컬럼 제거 — 외부 노출은 user uuid 조합으로 대체
+--   · [v2.0] popup_shown_a/b 제거 (이미 v1.9)
+--     매칭 성사 순간 FCM+WebSocket 으로 1회만 팝업, 서버 상태 저장 X
+--   · [v2.0] a_last_read/b_last_read → chat_room 으로 이동
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS match_results (
+    id             BIGINT    AUTO_INCREMENT PRIMARY KEY COMMENT '매칭 결과 PK (v2.0: CHAR UUID → BIGINT)',
+    user_a_id      BIGINT    NOT NULL COMMENT '페어 작은 ID (LEAST)',
+    user_b_id      BIGINT    NOT NULL COMMENT '페어 큰 ID (GREATEST)',
+    chat_room_id   BIGINT    DEFAULT NULL
+                             COMMENT '매칭 채팅방 FK (첫 메시지 전송 시 lazy 생성, 또는 파워메시지로 선생성)',
+
+    -- [v2.0] 매칭 성사 경로 추적
+    trigger_type   ENUM('MUTUAL_LIKE', 'PRE_MESSAGE_REPLY', 'PRE_MESSAGE_LIKE') NOT NULL
+                             COMMENT '매칭 성사 경로. 
+                                     MUTUAL_LIKE=양방향 LIKE/SUPER_LIKE,
+                                     PRE_MESSAGE_REPLY=파워메시지 답장으로 성사,
+                                     PRE_MESSAGE_LIKE=파워메시지 받은 유저가 LIKE 눌러 성사',
+
+    is_active      BOOLEAN   NOT NULL DEFAULT TRUE
+                             COMMENT '매칭 활성 여부. 차단·매칭해제 시 FALSE',
+
+    create_time    DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time    DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user    BIGINT    DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user    BIGINT    DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_match_a FOREIGN KEY (user_a_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_match_b FOREIGN KEY (user_b_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- 페어 순서는 Service 의 LEAST/GREATEST 로 강제 (DB CHECK 파서 버그 회피)
+    CONSTRAINT uk_match_pair   UNIQUE (user_a_id, user_b_id),
+
+    INDEX idx_match_user_a (user_a_id, is_active, create_time DESC),
+    INDEX idx_match_user_b (user_b_id, is_active, create_time DESC),
+    INDEX idx_match_trigger (trigger_type, create_time DESC)
+        COMMENT '매칭 경로별 통계 (PRE_MESSAGE 유료 기능 ROI 분석)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='매칭 성사 결과 (v2.0: BIGINT PK, trigger_type 추가, last_read 컬럼 chat_room 으로 이동)';
+
+
+
+-- ----------------------------------------------------------------------------
+-- 2-7. user_blocks — 차단 관계
+-- ----------------------------------------------------------------------------
+--   · 매칭 후보 필터:
+--     WHERE target_id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id=:me)
+--       AND target_id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id=:me)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_blocks (
+    blocker_id   BIGINT   NOT NULL COMMENT '차단한 유저 FK (복합 PK)',
+    blocked_id   BIGINT   NOT NULL COMMENT '차단당한 유저 FK (복합 PK)',
+    create_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user  BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+
+    PRIMARY KEY (blocker_id, blocked_id),
+    CONSTRAINT fk_block_blocker FOREIGN KEY (blocker_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_block_blocked FOREIGN KEY (blocked_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- [v1.2] chk_block_not_self 제거 — Service 레이어에서 검증
+
+    INDEX idx_block_blocked (blocked_id)
+        COMMENT '"나를 차단한 사람들" 역방향 조회'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='차단 관계 (양방향 매칭 제외 필터링용)';
+
+
+-- ----------------------------------------------------------------------------
+-- 2-8. profile_visit — 프로필 방문 이력 (프리미엄 기능용)
+-- ----------------------------------------------------------------------------
+--   · 무료: "최근 방문자 일부" / 프리미엄: 전체 목록
+--   · 30일 이상 데이터는 월 1회 배치로 DELETE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS profile_visit (
+    id             BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '방문 로그 PK',
+    visitor_id     BIGINT   NOT NULL COMMENT '방문한 유저 FK',
+    visited_id     BIGINT   NOT NULL COMMENT '방문당한 유저 FK (프로필 소유자)',
+    create_time    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+
+    CONSTRAINT fk_visit_visitor FOREIGN KEY (visitor_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_visit_visited FOREIGN KEY (visited_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- [v1.2] chk_visit_not_self 제거 — Service 레이어에서 검증
+
+    INDEX idx_visited_time (visited_id, create_time DESC),
+    INDEX idx_visitor_time (visitor_id, create_time DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='프로필 방문 이력 (프리미엄 기능)';
+
+
+
+-- ============================================================================
+-- [3. 포스트잇]
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 3-1. post_it — 포스트잇 게시글
+-- ----------------------------------------------------------------------------
+--   · [v2.0] is_lightning 컬럼 제거 — categories.code='LIGHTN' 로 판정
+--   · expires_at: 무료 = now()+1일 / 프리미엄 = now()+3일
+--   · pinned_until: 별 3개 아이템 사용 시 now()+1시간. 배치가 만료 해제.
+--   · is_hidden: 관리자/신고 누적(10회) 숨김
+--   · is_deleted: 작성자 Soft delete. 원글 삭제되어도 chat_room.is_active=TRUE 유지.
+--     UI 에서 "원문이 삭제된 포스트잇입니다" 표시 (post_content_snapshot 활용)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS post_it (
+    id              BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '포스트잇 PK',
+    uuid            CHAR(36) NOT NULL
+                             COMMENT '외부 식별자 (API path 노출용 UUIDv4)',
+    user_id         BIGINT   NOT NULL COMMENT '작성자',
+    category_id     INT      NOT NULL COMMENT '카테고리 FK',
+    content         TEXT     NOT NULL COMMENT '본문',
+    is_anonymous    BOOLEAN  NOT NULL DEFAULT FALSE
+                             COMMENT '익명 여부. 번개 카테고리(categories.code=LIGHTN)는 Service 에서 FALSE 강제',
+    -- [v2.0] is_lightning 컬럼 제거 — categories.code='LIGHTN' JOIN 으로 판정
+    expires_at      DATETIME NOT NULL COMMENT '글 만료 시각 (무료 24h, 프리미엄 72h)',
+    pinned_until    DATETIME DEFAULT NULL COMMENT '상단 고정 만료 시각 (NULL=고정 안 됨)',
+    report_count    INT      NOT NULL DEFAULT 0 COMMENT '신고 누적 (트리거가 자동 증가)',
+    reply_count     INT      NOT NULL DEFAULT 0 COMMENT '답장 수 (비정규화 캐시)',
+    is_hidden       BOOLEAN  NOT NULL DEFAULT FALSE COMMENT '숨김 여부 (10회 신고 누적/관리자)',
+    is_deleted      BOOLEAN  NOT NULL DEFAULT FALSE COMMENT 'Soft delete 여부 (작성자 삭제)',
+
+    create_time     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user     BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user     BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_post_user     FOREIGN KEY (user_id)     REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_post_category FOREIGN KEY (category_id) REFERENCES categories(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT uk_post_uuid UNIQUE (uuid),
+    CONSTRAINT chk_post_report_nn CHECK (report_count >= 0),
+    CONSTRAINT chk_post_reply_nn  CHECK (reply_count  >= 0),
+
+    -- 메인 피드 쿼리 패턴에 맞춘 인덱스 조합
+    INDEX idx_post_active_feed (is_hidden, is_deleted, expires_at, create_time DESC)
+        COMMENT '활성 포스트잇 최신순 목록',
+    INDEX idx_post_pinned      (pinned_until)
+        COMMENT '상단 고정 중인 글 정렬/만료',
+    INDEX idx_post_user_time   (user_id, create_time DESC)
+        COMMENT '내가 쓴 글',
+    INDEX idx_post_category    (category_id, create_time DESC)
+        COMMENT '카테고리 필터',
+    INDEX idx_post_user_cat_time (user_id, category_id, create_time)
+        COMMENT '일일 한도 체크 (글쓰기 2/일, 번개 1/일). v2.0 신규',
+    INDEX idx_post_expires     (expires_at)
+        COMMENT '만료 처리 배치'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='포스트잇 게시글 (v2.0: is_lightning 제거, categories.code=LIGHTN 로 판정)';
+
+
+-- ----------------------------------------------------------------------------
+-- 3-2. post_like — 포스트잇 좋아요
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS post_like (
+    id           BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '좋아요 PK',
+    post_id      BIGINT   NOT NULL COMMENT '포스트잇 FK',
+    user_id      BIGINT   NOT NULL COMMENT '좋아요 누른 유저 FK',
+    create_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user  BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_plike_post FOREIGN KEY (post_id) REFERENCES post_it(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_plike_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uk_plike_post_user UNIQUE (post_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='포스트잇 좋아요';
+
+
+
+-- ============================================================================
+-- [3-B. 통합 채팅]  ★ v1.9 신규
+-- ============================================================================
+-- 설계 포인트
+--   · 포스트잇 채팅과 매칭 채팅을 하나의 테이블로 통합
+--   · room_type ENUM('POST','MATCH') 으로 종류 구분
+--   · UX 목적: 통합 채팅 리스트에서 POST·MATCH 를 한 리스트에 최신순 노출
+--   · 같은 페어(유나-지호)에 POST 방과 MATCH 방이 동시 존재 가능 →
+--     두 카드를 리스트에서 그룹핑하여 노출 (같은 사람 카드 아래 하위 항목)
+--   · 이전 4개 테이블(post_chat_room/message, match_chat_room/message)은
+--     v1.9 에서 DROP 되고 이 테이블로 교체됨 (데이터 마이그레이션은 없음 — 출시 전)
+--
+-- Service 검증 규칙 (DB CHECK 파서 버그로 Service 에서만 강제):
+--   · room_type='POST'  → post_id 필수, match_result_id=NULL
+--   · room_type='MATCH' → match_result_id 필수, post_id=NULL
+--
+-- 포스트잇 포워딩 정책 (유지):
+--   · 같은 post_id 에 재답장 시 기존 방 재사용 (포워딩)
+--   · 같은 유저의 '다른 포스트잇'에 답장 시 매번 새 방 생성 (익명성 보존)
+--     포스트잇은 익명이므로 유저 페어 중복 체크를 하지 않음
+--
+-- 케이스별 방 생성 정책:
+--   · 케이스 1 (포스트잇 대화 중 매칭 성사 → 매칭 첫 메시지):
+--     기존 POST 방 감지 → CONFIRM_REQUIRED → 확인 후 MATCH 방 신규 생성,
+--     POST 방 유지
+--   · 케이스 2 (매칭 채팅 중 포스트잇 답장):
+--     기존 MATCH 방 감지 → CONFIRM_REQUIRED → 확인 후 POST 방 신규 생성,
+--     MATCH 방 유지
+--   · 케이스 5/7 (차단→해제→재매칭, 매칭 해제→재성사):
+--     기존 방은 is_active=FALSE 로 남고 새 방 별도 생성
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 3-B-1. chat_room — 통합 채팅방
+-- ----------------------------------------------------------------------------
+--   · room_type 으로 POST/MATCH 구분
+--   · 닉네임 스냅샷(display_name_a/b) 으로 닉네임 변경 후에도 방 표시 불변
+--   · 채팅 나가기 (혼자 나가기): left_user_a/b BOOLEAN + left_at
+--     나간 유저의 리스트에서만 숨김, 상대방은 방 유지
+--     CONFIRM 체크 시 "나간 방"은 기존 방으로 인식하지 않음
+--   · stale_notified_at: POST·MATCH 공통 — 3일 무응답 알림 발송 후 재발송 방지
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_room (
+    id               BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '채팅방 PK (내부 조인용)',
+    uuid             CHAR(36) NOT NULL COMMENT '외부 노출용 방 식별자',
+
+    room_type        ENUM('POST', 'MATCH') NOT NULL
+                              COMMENT '방 종류: POST=포스트잇 기반, MATCH=매칭 기반. Service 에서 타입별 컬럼 NULL 체크 강제',
+
+    -- POST 타입 전용 (room_type='POST' 일 때만 값 있음)
+    post_id          BIGINT   DEFAULT NULL
+                              COMMENT '포스트잇 원글 FK (POST 방에서 필수, MATCH 방에서 NULL).\n같은 post_id 에 재답장 시 기존 방 재사용 (포워딩)',
+
+    -- [v2.0] POST 방 원글 내용 스냅샷 (원글 삭제돼도 방에서 참고 가능)
+    post_content_snapshot TEXT DEFAULT NULL
+                              COMMENT '방 생성 당시 포스트잇 원글 내용 스냅샷 (불변).
+                                      POST 방에서만 사용, MATCH 방은 NULL.
+                                      원글 soft delete 되어도 방에서는 맥락 유지',
+
+    -- MATCH 타입 전용 (room_type='MATCH' 일 때만 값 있음)
+    -- [v2.0] match_result_id 타입 CHAR(36) → BIGINT (match_results PK 변경 반영)
+    match_result_id  BIGINT   DEFAULT NULL
+                              COMMENT '매칭 결과 FK (MATCH 방에서 필수, POST 방에서 NULL).\n파워메시지 발송 시 NULL 로 선생성됨 (응답 시 채워짐)',
+
+    -- [v2.0] 관련 MATCH 방 참조 (POST 방에서만 사용)
+    related_match_room_id BIGINT DEFAULT NULL
+                              COMMENT 'POST 방일 때만 값 있음. 같은 페어의 활성 MATCH 방 id.
+                                      UI 에서 "이미 매칭된 @{nickname}님과의 포스트잇 대화" 배너 표시.
+                                      실명 포스트잇 + 매칭 중 상대일 때만 채움.
+                                      매칭 해제 시 NULL 로 업데이트 (배치 또는 이벤트)',
+
+    -- 페어 (POST·MATCH 공통, 항상 user_a_id < user_b_id 로 정렬 저장)
+    user_a_id        BIGINT   NOT NULL COMMENT '페어 유저 A (LEAST)',
+    user_b_id        BIGINT   NOT NULL COMMENT '페어 유저 B (GREATEST)',
+
+    -- 닉네임 스냅샷 (방 생성 당시 고정, 이후 닉네임 변경되어도 불변)
+    display_name_a   VARCHAR(30) NOT NULL COMMENT '방 생성 당시 user_a 닉네임 (스냅샷, 불변)',
+    display_name_b   VARCHAR(30) NOT NULL COMMENT '방 생성 당시 user_b 닉네임 (스냅샷, 불변)',
+
+    -- 방 상태
+    is_active        BOOLEAN  NOT NULL DEFAULT TRUE
+                              COMMENT '방 활성 여부.
+                                      FALSE 전환 조건: 차단 / 매칭 해제.
+                                      원글 삭제되어도 TRUE 유지 (UI 에서 "원문 삭제됨" 표시)',
+    last_message_at  DATETIME DEFAULT NULL
+                              COMMENT '마지막 메시지 시각 (통합 리스트 정렬용, 3일 무응답 배치 기준)',
+
+    -- [v2.0] 읽음 추적 (match_results 에서 이동)
+    last_read_a      DATETIME DEFAULT NULL
+                              COMMENT 'user_a 가 마지막으로 읽은 시각 (안 읽은 메시지 수 계산용).
+                                      match_results 에 있던 a_last_read 를 v2.0 에서 이동',
+    last_read_b      DATETIME DEFAULT NULL
+                              COMMENT 'user_b 가 마지막으로 읽은 시각',
+
+    -- 3일 무응답 알림 (POST·MATCH 공통, 문구는 Service 에서 room_type 별 분기)
+    stale_notified_at DATETIME DEFAULT NULL
+                               COMMENT '3일 무응답 알림 발송 시각 (NULL=미발송). 발송 후 재발송 방지용',
+
+    -- 채팅 나가기 (혼자 나가기)
+    left_user_a      BOOLEAN  NOT NULL DEFAULT FALSE
+                              COMMENT 'user_a 가 방을 나갔는지. TRUE 면 A 의 리스트에서 숨김',
+    left_user_b      BOOLEAN  NOT NULL DEFAULT FALSE
+                              COMMENT 'user_b 가 방을 나갔는지. TRUE 면 B 의 리스트에서 숨김',
+    left_at          DATETIME DEFAULT NULL
+                              COMMENT '마지막 나가기 발생 시각 (둘 다 나가면 최근 시각)',
+
+    -- 감사 (BaseEntity)
+    create_time      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user      BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user      BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT uk_chat_room_uuid UNIQUE (uuid),
+    CONSTRAINT fk_chat_room_user_a FOREIGN KEY (user_a_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_chat_room_user_b FOREIGN KEY (user_b_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_chat_room_post FOREIGN KEY (post_id) REFERENCES post_it(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_chat_room_match FOREIGN KEY (match_result_id) REFERENCES match_results(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_chat_room_related_match FOREIGN KEY (related_match_room_id) REFERENCES chat_room(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_chat_room_user_a (user_a_id, is_active, last_message_at DESC)
+        COMMENT '유저 A 의 통합 리스트 조회 (최신순, 활성만)',
+    INDEX idx_chat_room_user_b (user_b_id, is_active, last_message_at DESC)
+        COMMENT '유저 B 의 통합 리스트 조회 (최신순, 활성만)',
+    INDEX idx_chat_room_post (post_id, is_active)
+        COMMENT '포스트잇별 채팅방 탐색 (포워딩 체크용)',
+    INDEX idx_chat_room_match_result (match_result_id)
+        COMMENT '매칭 결과별 채팅방 1:1 탐색',
+    INDEX idx_chat_room_stale (is_active, last_message_at, stale_notified_at)
+        COMMENT '3일 무응답 배치용 (POST·MATCH 공통)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='통합 채팅방 (POST·MATCH 통합). v1.9 신규';
+
+
+-- ----------------------------------------------------------------------------
+-- 3-B-2. chat_message — 통합 채팅 메시지
+-- ----------------------------------------------------------------------------
+--   · message_type:
+--     - TEXT       : 일반 텍스트 메시지
+--     - SYSTEM     : 시스템 알림 (3일 무응답, 원글 삭제 등)
+--     - POST_QUOTE : 포스트잇 인용 카드 (포워딩 시 원글 표시. POST 방에서만 사용)
+--   · quoted_post_id: message_type='POST_QUOTE' 일 때만 의미 있음
+--   · is_canceled: 메시지 취소 (상대가 읽기 전에만 가능, Service 검증)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_message (
+    id              BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '메시지 PK',
+    uuid            CHAR(36) NOT NULL COMMENT '외부 노출용 메시지 식별자',
+    room_id         BIGINT   NOT NULL COMMENT '채팅방 FK (chat_room.id)',
+
+    sender_id       BIGINT   DEFAULT NULL
+                             COMMENT '보낸 유저 FK. SYSTEM 메시지는 NULL',
+
+    message_type    ENUM('TEXT', 'SYSTEM', 'POST_QUOTE') NOT NULL DEFAULT 'TEXT'
+                             COMMENT '메시지 유형. POST_QUOTE 는 POST 방에서만 사용 (Service 검증)',
+
+    content         TEXT     NOT NULL COMMENT '메시지 본문 (TEXT 최대 5000자 권장, Service 검증)',
+
+    -- POST_QUOTE 전용
+    quoted_post_id  BIGINT   DEFAULT NULL
+                             COMMENT '인용한 포스트잇 원글 FK (message_type=POST_QUOTE 일 때만)',
+
+    -- 읽음·취소
+    read_at         DATETIME DEFAULT NULL
+                             COMMENT '상대가 읽은 시각 (1:1 방이므로 1개 컬럼으로 충분)',
+    is_canceled     BOOLEAN  NOT NULL DEFAULT FALSE
+                             COMMENT '메시지 취소 여부 (상대 읽기 전에만 Service 에서 허용)',
+    canceled_at     DATETIME DEFAULT NULL COMMENT '취소 시각',
+
+    -- 감사
+    create_time     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+
+    CONSTRAINT uk_chat_msg_uuid UNIQUE (uuid),
+    CONSTRAINT fk_chat_msg_room FOREIGN KEY (room_id) REFERENCES chat_room(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_chat_msg_sender FOREIGN KEY (sender_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_chat_msg_quoted FOREIGN KEY (quoted_post_id) REFERENCES post_it(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_chat_msg_room_time (room_id, create_time)
+        COMMENT '채팅방 메시지 시간순 페이징',
+    INDEX idx_chat_msg_sender (sender_id)
+        COMMENT '특정 유저의 메시지 조회 (관리자 신고 처리용)',
+    INDEX idx_chat_msg_read (room_id, read_at)
+        COMMENT '안 읽은 메시지 조회 (read_at IS NULL)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='통합 채팅 메시지 (POST·MATCH 통합). v1.9 신규';
+
+
+
+
+-- ============================================================================
+-- [4. 밸런스 게임]
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 4-1. bal_game — 밸런스 게임 본문
+-- ----------------------------------------------------------------------------
+--   · 상태 전이: DRAFT → SCHEDULED → PUBLISHED → HIDDEN / ARCHIVED
+--   · [v2.0] total_count Generated Column 제거 — 앱/API 에서 a_count+b_count 계산
+--   · 투표 동시성: 원자 UPDATE (UPDATE bal_game SET a_count=a_count+1 WHERE id=?)
+--     → 비관적 락·낙관적 락 불필요
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bal_game (
+    id             BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '밸런스게임 PK',
+    uuid           CHAR(36)     NOT NULL
+                                COMMENT '외부 식별자 (API 노출용 UUIDv4, id 순차 스캔 방어)',
+    option_a       VARCHAR(255) NOT NULL COMMENT 'A 선택지 제목',
+    option_a_desc  VARCHAR(500) DEFAULT NULL
+                                COMMENT 'A 선택지 부연 설명 (선택).
+                                        예: option_a="치킨", option_a_desc="바삭한 후라이드 치킨 한 마리"',
+    option_b       VARCHAR(255) NOT NULL COMMENT 'B 선택지 제목',
+    option_b_desc  VARCHAR(500) DEFAULT NULL
+                                COMMENT 'B 선택지 부연 설명 (선택).
+                                        예: option_b="피자", option_b_desc="치즈가 가득한 마르게리타 피자"',
+    description    TEXT         DEFAULT NULL COMMENT '게임 전체 배경 설명 (선택). 기존 유지',
+    category_id    INT          NOT NULL COMMENT '카테고리 FK',
+    status         ENUM('DRAFT', 'SCHEDULED', 'PUBLISHED', 'HIDDEN', 'ARCHIVED')
+                                NOT NULL DEFAULT 'DRAFT' COMMENT '게임 상태 (DRAFT/SCHEDULED/PUBLISHED/HIDDEN/ARCHIVED)',
+    scheduled_at   DATETIME     DEFAULT NULL COMMENT '예약 게시 시각',
+    a_count        INT          NOT NULL DEFAULT 0 COMMENT 'A 선택 수 (원자 UPDATE a_count=a_count+1)',
+    b_count        INT          NOT NULL DEFAULT 0 COMMENT 'B 선택 수 (원자 UPDATE b_count=b_count+1)',
+    -- [v2.0] total_count Generated Column 제거 — 앱에서 (a_count + b_count) 계산
+    comment_count  INT          NOT NULL DEFAULT 0 COMMENT '댓글 수 (비정규화 캐시)',
+    applicant_id   BIGINT       DEFAULT NULL COMMENT '신청자 (bal_apply 승인 시 이관)',
+    version        BIGINT       NOT NULL DEFAULT 0
+                                COMMENT 'JPA 낙관적 락용 (@Version). status/description 등 메타 수정 시에만 사용.
+                                        투표 카운트 UPDATE 는 원자 연산이므로 버전 영향 없음',
+
+    create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user    BIGINT       DEFAULT NULL COMMENT '생성자 user_id (BaseEntity)',
+    update_user    BIGINT       DEFAULT NULL COMMENT '수정자 user_id (BaseEntity)',
+
+    CONSTRAINT fk_game_category  FOREIGN KEY (category_id)
+        REFERENCES categories(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_game_applicant FOREIGN KEY (applicant_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT uk_game_uuid      UNIQUE (uuid),
+    CONSTRAINT chk_game_a_nn CHECK (a_count >= 0),
+    CONSTRAINT chk_game_b_nn CHECK (b_count >= 0),
+    CONSTRAINT chk_game_comment_nn CHECK (comment_count >= 0),
+
+    INDEX idx_game_category        (category_id),
+    INDEX idx_game_status          (status),
+    INDEX idx_game_status_schedule (status, scheduled_at)
+        COMMENT '예약 게시 스케줄러: SCHEDULED 중 scheduled_at<=now 탐색'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임 본문';
+
+
+-- ----------------------------------------------------------------------------
+-- 4-2. bal_apply — 밸런스 게임 신청
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bal_apply (
+    id           BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '신청 PK',
+    user_id      BIGINT       DEFAULT NULL COMMENT '신청자 (탈퇴 시 NULL)',
+    option_a     VARCHAR(255) NOT NULL COMMENT '신청한 A 선택지 제목',
+    option_b     VARCHAR(255) NOT NULL COMMENT '신청한 B 선택지 제목',
+    category_id  INT          NOT NULL COMMENT '카테고리 FK',
+    status       ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '처리 상태 (PENDING=대기/APPROVED=승인/REJECTED=반려)',
+    admin_memo   VARCHAR(255) DEFAULT NULL COMMENT '반려 사유 등',
+
+    create_time  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user  BIGINT       DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user  BIGINT       DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_apply_category FOREIGN KEY (category_id)
+        REFERENCES categories(id) ON UPDATE CASCADE,
+    CONSTRAINT fk_apply_user FOREIGN KEY (user_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_apply_status_time (status, create_time)
+        COMMENT '관리자 승인 대기 큐'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임 신청';
+
+
+-- ----------------------------------------------------------------------------
+-- 4-3. vote — 투표 기록
+-- ----------------------------------------------------------------------------
+--   · 한 게임에 한 유저 1행 (UNIQUE). 투표 수정은 같은 행 UPDATE
+--   · 투표 수정 트랜잭션:
+--       1) bal_game 락 획득 (PESSIMISTIC_WRITE) or 원자 UPDATE
+--       2) 기존 선택지 count --, 새 선택지 count ++
+--       3) vote.choice UPDATE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS vote (
+    id           BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '투표 PK',
+    game_id      BIGINT   NOT NULL COMMENT '밸런스게임 FK',
+    user_id      BIGINT   NOT NULL COMMENT '투표자 user FK',
+    choice       ENUM('A', 'B') NOT NULL COMMENT '선택 (A 또는 B)',
+
+    create_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                          ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user  BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user  BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_vote_game FOREIGN KEY (game_id) REFERENCES bal_game(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_vote_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uk_vote_game_user UNIQUE (game_id, user_id),
+
+    INDEX idx_vote_user (user_id)
+        COMMENT '내가 참여한 게임 목록'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임 투표 기록';
+
+
+-- ----------------------------------------------------------------------------
+-- 4-4. bal_game_comment — 밸런스 게임 댓글
+-- ----------------------------------------------------------------------------
+--   · parent_id 로 2-depth 계층 (대댓글은 허용, 대대댓글은 서비스에서 차단)
+--   · [v1.1] report_count / is_hidden 추가
+--     · 댓글 신고가 발생할 때마다 report_count += 1
+--     · report_count >= 10 이 되는 순간 is_hidden = TRUE 자동 전환
+--   · 삭제 시 is_deleted=TRUE. 자식이 있으면 UI 에서 "삭제된 댓글입니다" 치환
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bal_game_comment (
+    id            BIGINT      AUTO_INCREMENT PRIMARY KEY COMMENT '댓글 PK',
+    uuid          CHAR(36)    NOT NULL
+                              COMMENT '외부 식별자 (신고/삭제 API path 용)',
+    game_id       BIGINT      NOT NULL COMMENT '밸런스게임 FK',
+    user_id       BIGINT      NOT NULL COMMENT '작성자 user FK',
+    parent_id     BIGINT      DEFAULT NULL COMMENT 'NULL=원댓글, 값 있음=대댓글',
+    nickname      VARCHAR(50) NOT NULL
+                              COMMENT 'bal_name_map 에서 복제 저장 (조회 성능)',
+    content       TEXT        NOT NULL COMMENT '댓글 본문',
+    is_deleted    BOOLEAN     NOT NULL DEFAULT FALSE COMMENT 'Soft delete (UI: 삭제된 댓글입니다)',
+    -- [v1.1] 신고 누적 자동 숨김
+    is_hidden     BOOLEAN     NOT NULL DEFAULT FALSE
+                              COMMENT '10회 이상 신고 누적 시 TRUE',
+    report_count  INT         NOT NULL DEFAULT 0 COMMENT '신고 누적 (트리거가 자동 증가)',
+    likes_count   INT         NOT NULL DEFAULT 0 COMMENT '댓글 좋아요 수 (비정규화 캐시)',
+
+    create_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user   BIGINT      DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user   BIGINT      DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_comment_game   FOREIGN KEY (game_id)   REFERENCES bal_game(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_comment_user   FOREIGN KEY (user_id)   REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- 원 댓글이 Soft delete 되어도 대댓글은 남겨야 하므로 SET NULL 이 아니라 parent_id 유지
+    -- 실제 물리 삭제는 없으므로 ON DELETE 는 의미 없음. 일관성을 위해 SET NULL 유지
+    CONSTRAINT fk_comment_parent FOREIGN KEY (parent_id) REFERENCES bal_game_comment(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT uk_bgc_uuid UNIQUE (uuid),
+    CONSTRAINT chk_bc_report_nn CHECK (report_count >= 0),
+    CONSTRAINT chk_bc_likes_nn  CHECK (likes_count  >= 0),
+
+    INDEX idx_bc_game_create_time (game_id, create_time)
+        COMMENT '댓글 목록 오래된→최신 정렬',
+    INDEX idx_bc_game_parent      (game_id, parent_id)
+        COMMENT '대댓글 조회',
+    INDEX idx_bc_hidden_filter    (game_id, is_hidden, is_deleted)
+        COMMENT '숨김/삭제 필터링'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임 댓글';
+
+
+-- ----------------------------------------------------------------------------
+-- 4-5. bal_comment_like — 댓글 좋아요
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bal_comment_like (
+    id           BIGINT   AUTO_INCREMENT PRIMARY KEY COMMENT '댓글 좋아요 PK',
+    comment_id   BIGINT   NOT NULL COMMENT '댓글 FK',
+    user_id      BIGINT   NOT NULL COMMENT '좋아요 누른 유저 FK',
+    create_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    create_user  BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_bclike_comment FOREIGN KEY (comment_id)
+        REFERENCES bal_game_comment(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_bclike_user    FOREIGN KEY (user_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uk_bclike_comment_user UNIQUE (comment_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임 댓글 좋아요';
+
+
+-- ----------------------------------------------------------------------------
+-- 4-6. bal_name_map — 게임별 익명 닉네임 매핑
+-- ----------------------------------------------------------------------------
+--   · "형용사 + 동물" 조합 (예: 배고픈 사자, 졸린 거북이)
+--   · [v1.1] (game_id, nickname) UNIQUE — 게임 내 중복 방지
+--     · 동시 insert 경합 시 DataIntegrityViolationException 을 catch 후
+--       재추첨(최대 3회), 실패 시 숫자 suffix(#2, #3) 폴백
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bal_name_map (
+    game_id      BIGINT      NOT NULL COMMENT '밸런스게임 FK (복합 PK)',
+    user_id      BIGINT      NOT NULL COMMENT '유저 FK (복합 PK)',
+    nickname     VARCHAR(50) NOT NULL COMMENT '이 게임에서의 익명 닉네임 (형용사+명사)',
+
+    create_time  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user  BIGINT      DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user  BIGINT      DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    PRIMARY KEY (game_id, user_id),
+    CONSTRAINT fk_map_game FOREIGN KEY (game_id) REFERENCES bal_game(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_map_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- [v1.1] 게임 내 닉네임 유일성 보장
+    CONSTRAINT uk_bnm_game_nickname UNIQUE (game_id, nickname)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='밸런스 게임별 익명 닉네임 매핑';
+
+
+
+-- ============================================================================
+-- [5. 운영] 감사 로그 / 스케줄러 분산 락
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 5-1. audit_log — 관리자 액션 감사 로그
+-- ----------------------------------------------------------------------------
+--   · [v2.0] actor_id → admin_id 리네임. FK 를 admin_account 로 변경
+--   · PUBLISHED 전환, HIDDEN 처리, 신고 처리 등 관리자 주요 행위를 기록
+--   · 일반 유저 액션은 여기 기록하지 않음 (서비스 로그는 별도 관리)
+--   · before_json / after_json: 변경 전후 스냅샷 (JSON)
+--     예: event='NICKNAME_FORCE_CHANGE' 시 
+--         before={"nickname":"바보"}, after={"nickname":"유나"}
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_log (
+    id             BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '감사 로그 PK',
+    admin_id       BIGINT       NOT NULL COMMENT '액션 주체 관리자 admin_account.id (v2.0: actor_id 에서 리네임)',
+    action         VARCHAR(50)  NOT NULL
+                                COMMENT 'PUBLISH_GAME | HIDE_COMMENT | PROCESS_REPORT | REFUND | SUSPEND_USER ...',
+    target_type    VARCHAR(30)  DEFAULT NULL COMMENT '대상 도메인 이름 (예: USER, POST_IT, BAL_GAME, PAYMENT)',
+    target_id      BIGINT       DEFAULT NULL COMMENT '대상 레코드 ID',
+    before_json    JSON         DEFAULT NULL
+                                COMMENT '변경 전 스냅샷 (JSON). 감사 추적·롤백 근거.
+                                        예: {"nickname":"바보","is_hidden":false}',
+    after_json     JSON         DEFAULT NULL
+                                COMMENT '변경 후 스냅샷 (JSON).
+                                        예: {"nickname":"유나","is_hidden":true}',
+    ip_address     VARCHAR(45)  DEFAULT NULL COMMENT 'IPv6 대응 45자',
+    user_agent     VARCHAR(255) DEFAULT NULL COMMENT '요청 User-Agent (브라우저/기기 식별)',
+
+    create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+
+    -- [v2.0] FK 는 스키마 끝 [12. 후처리 FK] 섹션에서 ALTER TABLE 로 추가
+    --   (admin_account 는 [7-B] 에 있어 audit_log 생성 시점에 아직 없음)
+
+    INDEX idx_audit_admin_time  (admin_id, create_time DESC),
+    INDEX idx_audit_target      (target_type, target_id),
+    INDEX idx_audit_action_time (action, create_time DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='관리자 액션 감사 로그 (v2.0: admin_id 로 리네임, FK → admin_account RESTRICT)';
+
+
+-- ----------------------------------------------------------------------------
+-- [v1.1 신규] 5-2. shedlock — 스케줄러 분산 락
+-- ----------------------------------------------------------------------------
+--   · 멀티 인스턴스 환경에서 @Scheduled 중복 실행 방지
+--   · ShedLock 라이브러리 표준 스키마
+--   · 예: BalancePublishScheduler 가 동시에 여러 서버에서 실행되어
+--     같은 SCHEDULED 게임을 두 번 PUBLISHED 로 전환하지 않도록 보호
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS shedlock (
+    name        VARCHAR(64)   NOT NULL PRIMARY KEY COMMENT '락 이름 (잡 식별자)',
+    lock_until  TIMESTAMP(3)  NOT NULL COMMENT '이 시각까지 락 유지',
+    locked_at   TIMESTAMP(3)  NOT NULL COMMENT '락 획득 시각',
+    locked_by   VARCHAR(255)  NOT NULL COMMENT '락 보유 서버 식별자'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='스케줄러 분산 락 (ShedLock 표준)';
+
+
+
+-- ============================================================================
+-- [6. 알림] FCM 디바이스 토큰 / 알림 이력 / 유저 수신 설정
+-- ============================================================================
+-- 설계 포인트
+--   · 매칭 도메인의 모든 주요 액션(좋아요/슈퍼좋아요/매칭성사/파워메시지 등)에
+--     대해 서버가 FCM 으로 푸시 알림을 전송한다.
+--   · 한 유저가 여러 기기에 로그인할 수 있으므로 device_token 은 다대일 구조.
+--   · 알림 "내용"은 서비스 계층의 NotificationTemplate 로 관리하고,
+--     DB 에는 발송 기록만 남긴다 (내용 변경 시 마이그레이션 부담 최소화).
+--   · 유저가 특정 타입 알림을 끌 수 있도록 notification_setting 제공.
+--   · 야간 방해금지(DND) 는 설정 테이블의 시간 범위로 판단.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 6-1. device_token — FCM 디바이스 토큰
+-- ----------------------------------------------------------------------------
+--   · 유저 1명 : 토큰 N개 (스마트폰 + 태블릿 등 다기기)
+--   · 로그아웃 시 is_active=FALSE 로 비활성. 물리 삭제는 배치에서.
+--   · platform: iOS/ANDROID/WEB
+--   · fcm_token 은 길어질 수 있어 VARCHAR(512). UNIQUE 로 동일 토큰 중복 방지.
+--   · last_used_at 으로 오래 미사용 토큰 정리 배치가 참조.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS device_token (
+    id            BIGINT        AUTO_INCREMENT PRIMARY KEY COMMENT '디바이스 토큰 PK',
+    user_id       BIGINT        NOT NULL COMMENT '토큰 소유 유저',
+    fcm_token     VARCHAR(512)  NOT NULL COMMENT 'FCM registration token',
+    platform      ENUM('IOS', 'ANDROID', 'WEB') NOT NULL COMMENT '플랫폼 (IOS/ANDROID/WEB)',
+    device_model  VARCHAR(100)  DEFAULT NULL COMMENT '예: iPhone 14 Pro',
+    app_version   VARCHAR(30)   DEFAULT NULL COMMENT '앱 버전 (푸시 호환성 판단)',
+    is_active     BOOLEAN       NOT NULL DEFAULT TRUE
+                                 COMMENT '로그아웃/토큰 만료 시 FALSE',
+    last_used_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 COMMENT '마지막 사용(앱 실행) 시각',
+
+    create_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user   BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user   BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_device_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    -- 같은 토큰 문자열은 전역에서 유일해야 함 (FCM 정책)
+    CONSTRAINT uk_device_token UNIQUE (fcm_token),
+
+    -- 유저의 활성 토큰 리스트 조회 (알림 발송 시 핵심 쿼리)
+    INDEX idx_device_user_active (user_id, is_active),
+    -- 오래 미사용 토큰 정리 배치
+    INDEX idx_device_last_used (last_used_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='FCM 디바이스 토큰 (유저당 다기기)';
+
+
+-- ----------------------------------------------------------------------------
+-- 6-2. notification_log — 알림 발송 이력
+-- ----------------------------------------------------------------------------
+--   · 모든 푸시 알림은 이 테이블에 우선 INSERT 된 뒤, 비동기 워커가 FCM 호출.
+--   · status 전이: PENDING → SENT | FAILED → (재시도) SENT
+--   · idempotency_key: 동일 이벤트 중복 발송 방지 (예: "LIKE:actor=10:target=20")
+--       같은 행위에 대해 서로 다른 요청이 두 번 들어와도 한 번만 알림.
+--   · data_json: 딥링크/화면 이동용 payload (예: matchId, actorId, roomUuid 등)
+--   · 읽음(read_at) 은 클라이언트가 알림 탭 시 서버에 보고하여 갱신.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_log (
+    id                BIGINT        AUTO_INCREMENT PRIMARY KEY COMMENT '알림 로그 PK',
+    uuid              CHAR(36)      NOT NULL
+                                    COMMENT '외부 식별자 (PATCH /notifications/{uuid}/read API path)',
+    recipient_id      BIGINT        NOT NULL COMMENT '수신자 user_id',
+
+    -- 알림 타입 (설정 on/off 및 템플릿 매핑의 키)
+    notification_type ENUM(
+        -- 매칭 도메인
+        'MATCH_LIKE',         -- 누군가 당신을 좋아했어요!
+        'MATCH_SUPER_LIKE',   -- 누군가 슈퍼좋아요를 눌렀어요!
+        'MATCH_SUCCESS',      -- 매칭에 성공했어요! 채팅을 보내보세요!
+        'MATCH_PRE_MESSAGE',  -- 누군가 파워메시지를 보냈어요!
+        'MATCH_CHAT_MESSAGE', -- 새 채팅 메시지 도착
+        'MATCH_CHAT_STALE',   -- 매칭 후 답장하지 않은 채팅방이 있어요 (v1.7)
+        'PRE_MESSAGE_STALE',  -- 받은 파워메시지에 아직 답장하지 않으셨어요 (v2.0)
+        'MATCH_PROFILE_VISIT',-- 누군가 내 프로필을 봤어요 (프리미엄)
+        'MATCH_DAILY_PICK',   -- 오늘의 Pick 업데이트
+        -- 포스트잇 도메인
+        'POST_LIKE',          -- 내 포스트잇을 좋아했어요
+        'POST_REPLY',         -- 답장이 도착했어요
+        'POST_CHAT_MESSAGE',  -- 새 채팅
+        'POST_CHAT_CANCELED', -- 상대가 메시지를 취소했어요
+        'POST_CHAT_STALE',    -- 포스트잇 답장에 아직 회신하지 않은 채팅방이 있어요 (v1.9)
+        -- 밸런스게임 도메인
+        'BAL_COMMENT_REPLY',  -- 내 댓글에 대댓글이 달렸어요
+        'BAL_COMMENT_LIKE',   -- 내 댓글에 좋아요
+        'BAL_APPLY_APPROVED', -- 신청한 밸런스게임 승인됨
+        -- 운영·공지
+        'SYSTEM_NOTICE',      -- 시스템 공지
+        'PAYMENT_SUCCESS',    -- 결제 완료
+        'SUBSCRIPTION_EXPIRING' -- 구독 만료 임박
+    ) NOT NULL COMMENT '알림 타입 (17종 — MATCH/POST/BAL/시스템 그룹)',
+
+    title             VARCHAR(100)  NOT NULL COMMENT '푸시 제목',
+    body              VARCHAR(255)  NOT NULL COMMENT '푸시 본문',
+    data_json         JSON          DEFAULT NULL
+                                     COMMENT '딥링크 payload (actorId, roomUuid 등)',
+
+    -- 상태
+    status            ENUM('PENDING', 'SENT', 'FAILED', 'SUPPRESSED')
+                                    NOT NULL DEFAULT 'PENDING'
+                                     COMMENT 'SUPPRESSED = 수신 설정/DND 로 차단됨',
+    retry_count       INT           NOT NULL DEFAULT 0 COMMENT 'FCM 재시도 횟수 (최대 3회)',
+    error_message     VARCHAR(500)  DEFAULT NULL COMMENT 'FCM 실패 사유',
+
+    -- 관련 액터 (딥링크/분석용)
+    actor_id          BIGINT        DEFAULT NULL
+                                     COMMENT '알림을 유발한 상대 user_id',
+    ref_type          VARCHAR(30)   DEFAULT NULL
+                                     COMMENT 'MATCH_ACTION | POST_REPLY 등',
+    ref_id            BIGINT        DEFAULT NULL
+                                     COMMENT '원인 레코드 ID',
+
+    -- 멱등
+    idempotency_key   VARCHAR(150)  DEFAULT NULL
+                                     COMMENT '중복 발송 방지 키',
+
+    -- 클라이언트 확인
+    sent_at           DATETIME      DEFAULT NULL COMMENT '실제 FCM 발송 완료 시각',
+    read_at           DATETIME      DEFAULT NULL COMMENT '유저가 알림 센터에서 읽은 시각',
+
+    create_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                     ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user       BIGINT        DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user       BIGINT        DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_notif_recipient FOREIGN KEY (recipient_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_notif_actor     FOREIGN KEY (actor_id)     REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT uk_notif_idem UNIQUE (idempotency_key),
+
+    -- 알림 센터 (수신자의 최신순 목록)
+    INDEX idx_notif_recipient_time (recipient_id, create_time DESC),
+    -- 읽지 않은 알림 배지 카운트
+    INDEX idx_notif_unread         (recipient_id, read_at),
+    -- 발송 워커가 PENDING 스캔
+    INDEX idx_notif_status_time    (status, create_time),
+    -- 타입별 통계/필터
+    INDEX idx_notif_type_time      (notification_type, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='푸시 알림 발송 이력 + 인박스';
+
+
+-- ----------------------------------------------------------------------------
+-- 6-3. notification_setting — 유저별 알림 수신 설정
+-- ----------------------------------------------------------------------------
+--   · 유저당 1행 (user_id PK). 회원가입 시 기본값 INSERT.
+--   · 각 타입별로 on/off 를 주지 않고 "카테고리 그룹" 단위로 편성하여 UX 단순화:
+--     - match_notif  : 매칭 관련 전체
+--     - post_notif   : 포스트잇 관련 전체
+--     - bal_notif    : 밸런스게임 관련 전체
+--     - marketing    : 프로모션·공지 (법적 수신동의 분리)
+--   · 세부 항목(프로필 방문 알림 등)은 프리미엄 유저 전용 → plan 에 의존
+--   · 방해 금지(DND): 매일 반복되는 시간 범위 (예: 22:00 ~ 08:00)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_setting (
+    user_id           BIGINT   PRIMARY KEY COMMENT '유저 PK (1:1)',
+
+    -- 카테고리 단위 수신 여부
+    match_notif       BOOLEAN  NOT NULL DEFAULT TRUE
+                                COMMENT '매칭 관련 전체 (좋아요/슈퍼/매칭성공/파워메시지)',
+    post_notif        BOOLEAN  NOT NULL DEFAULT TRUE
+                                COMMENT '포스트잇 관련 전체',
+    bal_notif         BOOLEAN  NOT NULL DEFAULT TRUE
+                                COMMENT '밸런스게임 관련 전체',
+    marketing_notif   BOOLEAN  NOT NULL DEFAULT FALSE
+                                COMMENT '프로모션/마케팅 (수신동의 기본 FALSE)',
+
+    -- 세부 항목 — 기본 ON, 유저가 개별 차단 가능
+    match_like_notif         BOOLEAN NOT NULL DEFAULT TRUE COMMENT '좋아요 알림 세부 스위치',
+    match_super_like_notif   BOOLEAN NOT NULL DEFAULT TRUE COMMENT '슈퍼좋아요 알림 세부 스위치',
+    match_success_notif      BOOLEAN NOT NULL DEFAULT TRUE COMMENT '매칭 성공 알림 세부 스위치',
+    match_pre_message_notif  BOOLEAN NOT NULL DEFAULT TRUE COMMENT '파워메시지 알림 세부 스위치',
+    match_profile_visit_notif BOOLEAN NOT NULL DEFAULT TRUE
+                                COMMENT '프리미엄만 실제 발송됨',
+
+    -- 방해금지 (DND: Do Not Disturb). NULL 이면 OFF
+    dnd_start_time    TIME     DEFAULT NULL COMMENT '시작 시각 (예: 22:00)',
+    dnd_end_time      TIME     DEFAULT NULL COMMENT '종료 시각 (예: 08:00)',
+    -- dnd 구간에 걸린 알림은 notification_log.status='SUPPRESSED' 로 기록
+
+    -- 야간은 전송 O, 소리/진동만 OFF 같은 세부는 클라이언트에서 처리.
+    -- 서버는 "발송 여부" 만 관여한다.
+
+    create_time       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity, ON UPDATE 자동 갱신)',
+    create_user       BIGINT   DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user       BIGINT   DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_notif_setting_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저별 알림 수신 설정';
+
+
+
+-- ============================================================================
+-- [7. 법규·개인정보] 동의 이력 / 파기 이력 / 사진 관리
+-- ============================================================================
+-- 설계 포인트
+--   · 정보통신망법 + 개인정보보호법 대응을 위한 동의/파기 이력 필수 보관
+--   · 14세 미만 가입 차단 (휴대폰 PASS 본인인증으로 생년월일 검증)
+--   · 프로필 사진은 Cloudflare R2 저장 — 국외 이전 고지 필요 (약관에 명시)
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 7-1. user_consent — 개인정보 수집·이용 동의 이력
+-- ----------------------------------------------------------------------------
+--   · [v2.0] 행 기반 → 컬럼 기반 재설계
+--     각 동의 항목별로 _ver (버전) + _date (동의 시각) 컬럼 쌍 보유
+--   · 약관 버전 갱신 시 같은 컬럼의 _ver/_date 를 UPDATE (최신 동의만 유지)
+--   · agreed_at 컬럼 제거, create_time 으로 통합 사용
+--     ※ 마이그레이션 주의: 기존 agreed_at 데이터를 create_time 으로 이관 시,
+--        create_time 의 의미가 "최초 행 생성" → "최신 동의 시각" 이 됨
+--        ON UPDATE 갱신은 update_time 에 기록됨
+--   · withdrawn_at 은 별도 유지 (마케팅 동의 철회 추적용)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_consent (
+    user_id        BIGINT      PRIMARY KEY COMMENT '유저 PK (1:1)',
+
+    -- 필수 동의 4종 (각 항목별 버전·날짜 컬럼 쌍)
+    terms_agreed_ver        VARCHAR(20) DEFAULT NULL
+                                         COMMENT '이용약관 동의 버전 (예: "1.1")',
+    terms_agreed_date       DATETIME    DEFAULT NULL
+                                         COMMENT '이용약관 동의 시각',
+    privacy_agreed_ver      VARCHAR(20) DEFAULT NULL
+                                         COMMENT '개인정보 처리방침 동의 버전',
+    privacy_agreed_date     DATETIME    DEFAULT NULL
+                                         COMMENT '개인정보 처리방침 동의 시각',
+    age_over_14_agreed_date DATETIME    DEFAULT NULL
+                                         COMMENT '만 14세 이상 확인 시각 (버전 불필요)',
+    identity_verified_date  DATETIME    DEFAULT NULL
+                                         COMMENT 'PASS 본인인증 완료 시각',
+
+    -- 필수 동의: 민감정보·국외이전
+    sensitive_agreed_ver    VARCHAR(20) DEFAULT NULL
+                                         COMMENT '민감정보 수집·이용 동의서 버전',
+    sensitive_agreed_date   DATETIME    DEFAULT NULL
+                                         COMMENT '민감정보 동의 시각',
+    overseas_agreed_ver     VARCHAR(20) DEFAULT NULL
+                                         COMMENT '개인정보 국외 이전 동의 버전 (R2 사진 저장)',
+    overseas_agreed_date    DATETIME    DEFAULT NULL
+                                         COMMENT '국외 이전 동의 시각',
+
+    -- 선택 동의 3종
+    marketing_agreed_ver    VARCHAR(20) DEFAULT NULL
+                                         COMMENT '마케팅 정보 수신 동의 버전',
+    marketing_agreed_date   DATETIME    DEFAULT NULL
+                                         COMMENT '마케팅 동의 시각',
+    marketing_withdrawn_at  DATETIME    DEFAULT NULL
+                                         COMMENT '마케팅 동의 철회 시각 (NULL=유지)',
+    push_agreed_date        DATETIME    DEFAULT NULL
+                                         COMMENT '푸시 알림 수신 동의 시각',
+    push_withdrawn_at       DATETIME    DEFAULT NULL
+                                         COMMENT '푸시 동의 철회 시각',
+    location_agreed_date    DATETIME    DEFAULT NULL
+                                         COMMENT '위치정보 동의 시각',
+    location_withdrawn_at   DATETIME    DEFAULT NULL
+                                         COMMENT '위치정보 동의 철회 시각',
+
+    -- 동의 시점 증빙 (법적 분쟁 시 사용 — 최근 동의 시점 기준)
+    last_consent_ip         VARCHAR(45) DEFAULT NULL COMMENT '최근 동의 시점 IP (IPv4/IPv6)',
+    last_consent_user_agent VARCHAR(255) DEFAULT NULL COMMENT '최근 동의 시점 User-Agent',
+
+    -- [v2.0] agreed_at 컬럼 제거, create_time/update_time 사용
+    create_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               COMMENT '최초 생성 시각 (BaseEntity, 첫 가입 동의 시각 역할).
+                                       ※ v2.0 마이그레이션 시 기존 agreed_at 가 있으면 이 값으로 이관 필요',
+    update_time    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP
+                               COMMENT '최근 갱신 시각 (BaseEntity, 재동의·철회 시 자동 갱신)',
+
+    CONSTRAINT fk_consent_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    INDEX idx_consent_marketing (marketing_withdrawn_at)
+        COMMENT '마케팅 수신 동의 유지 유저 조회 (발송 대상 필터)',
+    INDEX idx_consent_terms_ver (terms_agreed_ver)
+        COMMENT '약관 버전별 재동의 필요 유저 탐색'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='개인정보 수집·이용 동의 (v2.0: 행 기반 → 컬럼 기반 재설계, 정보통신망법/개인정보보호법 대응)';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-2. user_destruction_log — 개인정보 파기 이력
+-- ----------------------------------------------------------------------------
+--   · 탈퇴 신청 후 30일 경과 시 배치가 개인정보 파기 후 여기에 기록
+--   · 법적 감사 대응 (개인정보보호법 제21조 — 파기 증빙 의무)
+--   · user_id 는 유지 (FK 무결성), 나머지 민감정보만 파기
+--   · 결제 기록은 전자상거래법 5년 의무 보관 — 별도 user_id 익명화 안 함
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_destruction_log (
+    id                BIGINT    AUTO_INCREMENT PRIMARY KEY COMMENT '파기 이력 PK',
+    user_id           BIGINT    NOT NULL COMMENT '파기 대상 user_id (유지됨, 로그용)',
+    user_uuid         CHAR(36)  NOT NULL COMMENT '파기 전 uuid 스냅샷',
+    withdrawn_at      DATETIME  NOT NULL COMMENT '탈퇴 신청 시각',
+    destroyed_at      DATETIME  NOT NULL COMMENT '실제 파기 시각 (보관 30일 후)',
+    destruction_reason ENUM('USER_WITHDRAW', 'ADMIN_FORCE', 'DORMANT_1Y') NOT NULL
+                                COMMENT 'USER_WITHDRAW=자발적 탈퇴, ADMIN_FORCE=강제, DORMANT_1Y=휴면',
+    destroyed_fields  JSON      DEFAULT NULL
+                                COMMENT '파기된 필드·데이터 목록 (예: ["phone","login_id","password","user_profile","user_consent"])',
+    photo_count_destroyed INT   NOT NULL DEFAULT 0 COMMENT '파기된 R2 사진 개수',
+    operator_id       BIGINT    DEFAULT NULL COMMENT '강제 파기 시 관리자 id',
+    note              VARCHAR(500) DEFAULT NULL COMMENT '비고',
+
+    create_time       DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+
+    INDEX idx_destruction_destroyed_at (destroyed_at)
+        COMMENT '감사 조회 (기간별)',
+    INDEX idx_destruction_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='개인정보 파기 이력 (개인정보보호법 제21조 증빙)';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-3. user_photo — 프로필 사진 (Cloudflare R2 저장)
+-- ----------------------------------------------------------------------------
+--   · 유저당 여러 장 등록 가능, is_main=TRUE 인 1장이 메인 사진
+--   · 메인 지정 시 Service 레이어에서 기존 메인을 FALSE 로 전환 후 새로 TRUE
+--     (MariaDB는 조건부 UNIQUE 미지원, Service 트랜잭션으로 강제)
+--   · sort_order 로 피드/프로필에서 나열 순서 결정
+--   · R2 국외 저장 — 동의(OVERSEAS_TRANSFER)를 user_consent 로 받아야 함
+--   · 탈퇴 파기 시 R2 실제 파일 삭제 + 이 행 DELETE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_photo (
+    id            BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '사진 PK',
+    uuid          CHAR(36)     NOT NULL COMMENT '외부 식별자 (API path 용)',
+    user_id       BIGINT       NOT NULL COMMENT '소유자 user FK',
+    r2_key        VARCHAR(255) NOT NULL COMMENT 'R2 object key (경로)',
+    public_url    VARCHAR(500) NOT NULL COMMENT '외부 공개 URL (워터마크 미적용 원본 기준)',
+    file_size     INT          NOT NULL COMMENT '파일 크기 (bytes)',
+    mime_type     VARCHAR(50)  NOT NULL COMMENT 'image/jpeg, image/png 등',
+    width         INT          DEFAULT NULL COMMENT '이미지 너비 (px)',
+    height        INT          DEFAULT NULL COMMENT '이미지 높이 (px)',
+    is_main       BOOLEAN      NOT NULL DEFAULT FALSE
+                               COMMENT '메인 사진 여부 (유저당 1장만 TRUE, Service 강제)',
+    sort_order    INT          NOT NULL DEFAULT 0
+                               COMMENT '정렬 순서 (작을수록 앞)',
+    is_verified   BOOLEAN      NOT NULL DEFAULT FALSE
+                               COMMENT '검수 완료 여부 (부적절 사진 필터 추후 도입)',
+
+    create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user   BIGINT       DEFAULT NULL COMMENT '생성자 user_id (BaseEntity, JWT 주입)',
+    update_user   BIGINT       DEFAULT NULL COMMENT '수정자 user_id (BaseEntity, JWT 주입)',
+
+    CONSTRAINT fk_photo_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT uk_photo_uuid UNIQUE (uuid),
+
+    INDEX idx_photo_user_main (user_id, is_main)
+        COMMENT '메인 사진 조회 (프로필 카드 표시용)',
+    INDEX idx_photo_user_sort (user_id, sort_order)
+        COMMENT '유저 사진 목록 정렬'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='프로필 사진 (Cloudflare R2 저장, 다중 사진 + 메인 지정)';
+
+
+
+-- ============================================================================
+-- [7-B. 관리자] 관리자 계정 / 로그인 이력 / 유저 제재 / 공지사항 / 재무 집계
+-- ============================================================================
+-- 설계 포인트
+--   · 일반 유저(users)와 관리자(admin_account)를 테이블 수준에서 완전 분리
+--     → 관리자 전용 컬럼(totp 등)이 수만 건의 유저 행에 NULL 로 쌓이는 것 방지
+--     → users.role 컬럼 제거 — 매칭 쿼리에서 role 필터 불필요
+--   · 관리자 계정은 회원가입 UI 없음 — DB 직접 INSERT 로 초기 생성
+--   · 계정 삭제 금지 — is_active=FALSE 로 비활성화만 (FK 무결성 유지)
+--   · Phase 1 인증: ID/비밀번호 + 로그인 기록
+--   · Phase 2 인증 (추후): TOTP 2FA + IP 화이트리스트 (컬럼 미리 확보하지 않음,
+--                        도입 시점에 ALTER TABLE 로 추가 예정)
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 7-B-1. admin_account — 관리자 계정
+-- ----------------------------------------------------------------------------
+--   · 일반 유저와 완전 분리된 관리자 전용 테이블
+--   · 관리자의 테스트용 일반 계정은 별도로 users 테이블에 생성 (분리 운영)
+--   · role 컬럼은 Phase 1 에서 모두 'ADMIN' 으로 통일, Phase 2 에서 세분화
+--   · 삭제 금지 정책 — is_active=FALSE 로 비활성화만 허용
+--   · 중복 로그인 허용 — 앱 + 웹 동시 접속 가능
+--   · 비밀번호 정책 (MVP): bcrypt 해시 저장 외에 복잡도 강제 없음
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_account (
+    id              BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '관리자 계정 PK',
+    uuid            CHAR(36)     NOT NULL COMMENT '외부 식별자 (API path 용)',
+    login_id        VARCHAR(50)  NOT NULL COMMENT '로그인 아이디',
+    password        VARCHAR(255) NOT NULL COMMENT 'bcrypt 해시된 비밀번호',
+    name            VARCHAR(50)  NOT NULL COMMENT '관리자 실명 (감사·책임 추적용)',
+    email           VARCHAR(100) DEFAULT NULL COMMENT '업무 이메일',
+    phone           VARCHAR(20)  DEFAULT NULL COMMENT '업무 연락처',
+
+    role            ENUM('SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'FINANCE', 'CS')
+                                 NOT NULL DEFAULT 'ADMIN'
+                                 COMMENT '관리자 역할. Phase 1 에서는 모두 ADMIN 으로 동일 권한 운영. Phase 2 에서 세분화 시점에 역할별 권한 매트릭스 적용',
+
+    -- 상태
+    is_active       BOOLEAN      NOT NULL DEFAULT TRUE
+                                 COMMENT '활성 여부. FALSE 시 로그인 불가. 계정 자체는 삭제하지 않고 비활성화만 (audit_log FK 무결성 유지)',
+    deactivated_at  DATETIME     DEFAULT NULL
+                                 COMMENT '비활성화 시각 (퇴사·권한 박탈 등)',
+    deactivated_reason VARCHAR(500) DEFAULT NULL
+                                    COMMENT '비활성화 사유 (퇴사, 보안 사고, 위반 등)',
+
+    -- 로그인 정보
+    last_login_at   DATETIME     DEFAULT NULL COMMENT '마지막 로그인 성공 시각',
+    last_login_ip   VARCHAR(45)  DEFAULT NULL COMMENT '마지막 로그인 성공 IP (IPv4/IPv6)',
+
+    -- 감사 (BaseEntity 공통)
+    create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user     BIGINT       DEFAULT NULL COMMENT '생성자 admin_account.id (DB 직접 INSERT 시 NULL 허용)',
+    update_user     BIGINT       DEFAULT NULL COMMENT '수정자 admin_account.id (비밀번호 변경·비활성화 등)',
+
+    CONSTRAINT uk_admin_uuid     UNIQUE (uuid),
+    CONSTRAINT uk_admin_login_id UNIQUE (login_id),
+
+    INDEX idx_admin_role_active (role, is_active)
+        COMMENT '역할별 활성 관리자 조회 (Phase 2 권한 체크용)',
+    INDEX idx_admin_last_login (last_login_at)
+        COMMENT '장기 미접속 관리자 탐지'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='관리자 계정 (일반 유저와 분리). 회원가입 UI 없음, 초기 계정은 DB 직접 INSERT';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-B-2. admin_login_log — 관리자 로그인 이력
+-- ----------------------------------------------------------------------------
+--   · Phase 1 부터 사용 — 모든 로그인 시도(성공·실패) 기록
+--   · 보안 감사, 비정상 접속 탐지(새 IP, 실패 반복) 용도
+--   · totp_verified 컬럼은 Phase 2 의 TOTP 2FA 도입 시 사용
+--     Phase 1 에서는 NULL (TOTP 미사용 상태)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_login_log (
+    id              BIGINT      AUTO_INCREMENT PRIMARY KEY COMMENT '로그인 이력 PK',
+    admin_id        BIGINT      DEFAULT NULL
+                                COMMENT '관리자 FK (존재하지 않는 login_id 시도 시 NULL)',
+    login_id_attempt VARCHAR(50) NOT NULL COMMENT '로그인 시도한 ID (실패 케이스 추적용)',
+    login_at        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '로그인 시도 시각',
+    ip_address      VARCHAR(45) DEFAULT NULL COMMENT '접속 IP (IPv4/IPv6)',
+    user_agent      VARCHAR(255) DEFAULT NULL COMMENT 'User-Agent 문자열 (브라우저/기기 판별)',
+    source          ENUM('WEB', 'APP') NOT NULL DEFAULT 'WEB'
+                                COMMENT '로그인 경로 — WEB=웹 대시보드, APP=모바일 앱 관리자 탭',
+
+    is_success      BOOLEAN     NOT NULL COMMENT '성공 여부',
+    failure_reason  ENUM('INVALID_PASSWORD', 'INVALID_ID',
+                         'ACCOUNT_INACTIVE', 'ACCOUNT_LOCKED',
+                         'IP_NOT_ALLOWED', 'TOTP_FAILED', 'OTHER')
+                                DEFAULT NULL
+                                COMMENT '실패 사유 (is_success=FALSE 일 때만). TOTP_FAILED / IP_NOT_ALLOWED 는 Phase 2 에서 사용',
+    failure_detail  VARCHAR(255) DEFAULT NULL
+                                 COMMENT '실패 상세 메시지 (OTHER 등 세부 기술)',
+
+    totp_verified   BOOLEAN     DEFAULT NULL
+                                COMMENT 'Phase 2 의 TOTP 2FA 통과 여부. Phase 1 에서는 NULL 유지 (미사용)',
+
+    CONSTRAINT fk_login_log_admin FOREIGN KEY (admin_id) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_login_log_admin_time (admin_id, login_at)
+        COMMENT '특정 관리자의 접속 이력 조회',
+    INDEX idx_login_log_ip_time (ip_address, login_at)
+        COMMENT '특정 IP 에서의 접속 이력 (공격 탐지)',
+    INDEX idx_login_log_failure (is_success, failure_reason, login_at)
+        COMMENT '실패 패턴 분석 (브루트포스 공격 탐지)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='관리자 로그인 이력 (Phase 1 부터 모든 시도 기록)';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-B-3. user_suspension — 유저 제재 이력
+-- ----------------------------------------------------------------------------
+--   · 경고 / 일시정지(7일/30일/커스텀) / 영구정지 관리
+--   · 자동 해제 배치 (매일 00:00 ShedLock name='autoLiftSuspension'):
+--       UPDATE user_suspension SET is_lifted=TRUE, lifted_at=NOW()
+--        WHERE is_lifted=FALSE AND ends_at IS NOT NULL AND ends_at < NOW();
+--   · 영구정지는 ends_at=NULL 로 저장 → 배치에서 자동 해제 대상 아님
+--   · 관리자가 수동 해제도 가능 (lifted_by 기록)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_suspension (
+    id              BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '제재 이력 PK',
+    user_id         BIGINT       NOT NULL COMMENT '제재 대상 user FK',
+    suspension_type ENUM('WARNING', 'TEMPORARY', 'PERMANENT') NOT NULL
+                                 COMMENT 'WARNING=경고(제재 X), TEMPORARY=일시정지(ends_at 필수), PERMANENT=영구정지(ends_at=NULL)',
+    reason          VARCHAR(500) NOT NULL COMMENT '제재 사유 (유저에게도 통보)',
+
+    starts_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 COMMENT '제재 시작 시각',
+    ends_at         DATETIME     DEFAULT NULL
+                                 COMMENT '제재 종료 시각. NULL=영구정지 또는 경고',
+
+    is_lifted       BOOLEAN      NOT NULL DEFAULT FALSE
+                                 COMMENT '해제 여부. 배치 또는 관리자 수동 해제 시 TRUE',
+    lifted_at       DATETIME     DEFAULT NULL COMMENT '해제 시각',
+    lifted_by       BIGINT       DEFAULT NULL
+                                 COMMENT '해제한 관리자 admin_account.id (배치 자동 해제 시 NULL)',
+    lifted_reason   VARCHAR(500) DEFAULT NULL COMMENT '수동 해제 사유 (이의 신청 수용 등)',
+
+    -- [v2.0] report_id 제거 — report.resulted_suspension_id 로 역참조하는 정책
+    --   "대표 신고 1건 + 누적 카운트" 정책상 여러 신고를 여기 묶어두는 것보다
+    --   report 쪽에서 "이 신고가 어떤 제재로 이어졌나" 추적하는 게 더 유용
+
+    created_by      BIGINT       NOT NULL
+                                 COMMENT '제재를 가한 관리자 admin_account.id',
+
+    create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+
+    CONSTRAINT fk_susp_user FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_susp_admin FOREIGN KEY (created_by) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_susp_lifted_by FOREIGN KEY (lifted_by) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_susp_user_active (user_id, is_lifted)
+        COMMENT '특정 유저의 활성 제재 조회 (로그인 차단 판정용)',
+    INDEX idx_susp_ends_at (ends_at, is_lifted)
+        COMMENT '자동 해제 배치용 (매일 00:00)',
+    INDEX idx_susp_created_by (created_by)
+        COMMENT '관리자별 제재 활동 통계'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='유저 제재 이력 (v2.0: report_id 제거, report.resulted_suspension_id 로 역참조)';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-B-4. notice — 공지사항 원문
+-- ----------------------------------------------------------------------------
+--   · 공지 원문 + 발송 대상 + 예약/즉시 발송
+--   · 발송 전: 수정·삭제 가능 (status='DRAFT' 또는 'SCHEDULED')
+--   · 발송 후: 수정·삭제 불가 (status='SENT') — 긴급 수정은 정정 공지로 별도 발송
+--   · send_source: 앱에서 발송한 것 vs 웹에서 발송한 것 구분
+--   · 조건부 발송: target_type 에 따라 target_filter(JSON) 해석
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notice (
+    id              BIGINT       AUTO_INCREMENT PRIMARY KEY COMMENT '공지 PK',
+    uuid            CHAR(36)     NOT NULL COMMENT '외부 식별자 (API path 용)',
+
+    title           VARCHAR(200) NOT NULL COMMENT '공지 제목 (푸시 알림 title 로도 사용)',
+    body            TEXT         NOT NULL COMMENT '공지 본문',
+
+    -- 발송 대상
+    target_type     ENUM('ALL', 'IOS', 'ANDROID', 'PREMIUM', 'SEGMENT') NOT NULL
+                                 COMMENT 'ALL=전체, IOS/ANDROID=플랫폼별, PREMIUM=프리미엄 구독자, SEGMENT=커스텀 조건',
+    target_filter   JSON         DEFAULT NULL
+                                 COMMENT 'SEGMENT 선택 시 세부 조건 JSON (예: {"area_id": [1,2], "age": {"min":20,"max":30}})',
+
+    -- 발송 상태
+    status          ENUM('DRAFT', 'SCHEDULED', 'SENT', 'CANCELED') NOT NULL DEFAULT 'DRAFT'
+                                 COMMENT 'DRAFT=작성중, SCHEDULED=예약됨, SENT=발송완료(수정 불가), CANCELED=발송 취소',
+    scheduled_at    DATETIME     DEFAULT NULL
+                                 COMMENT '예약 발송 시각 (NULL=즉시 발송)',
+    sent_at         DATETIME     DEFAULT NULL
+                                 COMMENT '실제 발송 완료 시각',
+
+    -- 발송 결과
+    sent_count      INT          NOT NULL DEFAULT 0 COMMENT '발송 성공 건수 (FCM 응답 기준)',
+    read_count      INT          NOT NULL DEFAULT 0 COMMENT '확인(탭) 건수',
+
+    -- 발송 경로
+    send_source     ENUM('APP', 'WEB') NOT NULL DEFAULT 'WEB'
+                                 COMMENT '발송 경로 — APP=모바일 앱 관리자 탭에서, WEB=웹 대시보드에서',
+
+    -- 정정 공지 연결
+    correction_of   BIGINT       DEFAULT NULL
+                                 COMMENT '정정 공지일 때 원 공지 id. 발송 후 수정 금지 정책으로 수정 필요 시 정정 공지 발송',
+
+    -- 감사
+    create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각 (BaseEntity)',
+    update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 시각 (BaseEntity)',
+    create_user     BIGINT       NOT NULL
+                                 COMMENT '작성한 관리자 admin_account.id',
+    update_user     BIGINT       DEFAULT NULL
+                                 COMMENT '마지막 수정한 관리자 admin_account.id',
+
+    CONSTRAINT uk_notice_uuid UNIQUE (uuid),
+    CONSTRAINT fk_notice_creator FOREIGN KEY (create_user) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_notice_correction FOREIGN KEY (correction_of) REFERENCES notice(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_notice_status_scheduled (status, scheduled_at)
+        COMMENT '예약 발송 배치가 처리할 건 조회 (status=SCHEDULED AND scheduled_at <= NOW())',
+    INDEX idx_notice_sent_at (sent_at)
+        COMMENT '발송 이력 조회 (최신순)',
+    INDEX idx_notice_target_type (target_type)
+        COMMENT '대상별 공지 조회'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='공지사항 원문 (발송 전 수정 가능, 발송 후 정정 공지로 대체)';
+
+
+-- ----------------------------------------------------------------------------
+-- 7-B-5. payment_daily_summary — 재무 정산 일별 요약
+-- ----------------------------------------------------------------------------
+--   · 매일 00:30 배치 (ShedLock name='dailyPaymentSummary') 로 전날 집계
+--   · 대시보드에서 그래프·추이 조회 시 이 테이블 사용
+--     (실시간 집계 쿼리 돌리면 payment_logs 테이블 부하 큼)
+--   · 재집계 가능 — 동일 날짜로 INSERT ... ON DUPLICATE KEY UPDATE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS payment_daily_summary (
+    summary_date    DATE         NOT NULL PRIMARY KEY COMMENT '집계 대상 날짜 (YYYY-MM-DD)',
+
+    -- 매출 (단위: 원)
+    total_revenue   BIGINT       NOT NULL DEFAULT 0 COMMENT '일 총 매출 (환불 전)',
+    star_revenue    BIGINT       NOT NULL DEFAULT 0
+                                 COMMENT '별 충전 매출. v2.0: 모든 아이템 구매는 별 차감이므로 여기에 이미 포함됨',
+    sub_revenue     BIGINT       NOT NULL DEFAULT 0 COMMENT '프리미엄 구독 매출 (신규+갱신)',
+    -- [v2.0] item_revenue 제거 — 아이템 매출은 star_revenue 에 이미 포함
+    --   아이템 소비 통계가 필요하면 star_transaction 에서 즉석 집계
+
+    -- 환불
+    refund_amount   BIGINT       NOT NULL DEFAULT 0 COMMENT '일 환불 총액',
+    refund_count    INT          NOT NULL DEFAULT 0 COMMENT '일 환불 건수',
+    net_revenue     BIGINT       NOT NULL DEFAULT 0 COMMENT '순 매출 = total_revenue - refund_amount',
+
+    -- 결제 건수
+    payment_count   INT          NOT NULL DEFAULT 0 COMMENT '결제 성공 건수',
+    payment_failed  INT          NOT NULL DEFAULT 0 COMMENT '결제 실패 건수',
+    payment_pending_expired INT  NOT NULL DEFAULT 0 COMMENT '24시간 미완료로 자동 만료된 건수',
+
+    -- 구독 관련
+    new_subscriber  INT          NOT NULL DEFAULT 0 COMMENT '신규 구독자 수',
+    renewed_subscriber INT       NOT NULL DEFAULT 0 COMMENT '자동 갱신된 구독자 수',
+    churn_count     INT          NOT NULL DEFAULT 0 COMMENT '구독 해지(중단) 수',
+    active_subscriber_eod INT    NOT NULL DEFAULT 0 COMMENT '하루 종료 시점 활성 구독자 수',
+
+    -- 유저 지표 (대시보드용)
+    dau             INT          NOT NULL DEFAULT 0 COMMENT '일일 활성 이용자 수 (Daily Active Users)',
+    new_users       INT          NOT NULL DEFAULT 0 COMMENT '신규 가입자 수',
+    withdraw_users  INT          NOT NULL DEFAULT 0 COMMENT '탈퇴자 수',
+
+    -- 감사
+    create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '집계 최초 생성 시각',
+    update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                 ON UPDATE CURRENT_TIMESTAMP COMMENT '재집계 시각',
+
+    INDEX idx_summary_date_desc (summary_date DESC)
+        COMMENT '최근 N일 조회 (대시보드 그래프)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='재무 정산 일별 요약 (매일 00:30 배치 집계, 대시보드 조회 성능용)';
+
+
+
+-- ============================================================================
+-- [8. 트리거 — 옵션]
+-- ============================================================================
+-- 아래 트리거들은 서비스 레이어에서 원자 UPDATE 로 대체 가능하므로 선택 사항.
+-- 다만 "신고가 어디서 발생하든 일관된 숨김 처리" 를 DB 차원에서 강제하고
+-- 싶다면 트리거를 사용한다.
+-- ============================================================================
+
+DELIMITER $$
+
+-- 6-1. 신고 insert 시 report_count 증가 + 10회 도달 시 자동 숨김
+--      (v2.0: target_id_long 제거, target_uuid 로 조회)
+--      (서비스 레이어에서 원자 UPDATE 로 처리하는 경우 이 트리거는 생략 가능)
+DROP TRIGGER IF EXISTS trg_report_after_insert_bal_comment$$
+CREATE TRIGGER trg_report_after_insert_bal_comment
+AFTER INSERT ON report
+FOR EACH ROW
+BEGIN
+    IF NEW.target_type = 'BAL_COMMENT' THEN
+        UPDATE bal_game_comment
+           SET report_count = report_count + 1,
+               is_hidden    = CASE WHEN report_count + 1 >= 10 THEN TRUE
+                                   ELSE is_hidden END
+         WHERE uuid = NEW.target_uuid;
+    ELSEIF NEW.target_type = 'POST_IT' THEN
+        UPDATE post_it
+           SET report_count = report_count + 1,
+               is_hidden    = CASE WHEN report_count + 1 >= 10 THEN TRUE
+                                   ELSE is_hidden END
+         WHERE uuid = NEW.target_uuid;
+    END IF;
+END$$
+
+-- 6-2. 양방향 LIKE 성사 시 match_results 자동 생성
+--      (v2.0: match_results PK 를 BIGINT AUTO_INCREMENT 로 변경 — UUID() 불필요
+--       또한 trigger_type 컬럼 추가로 MUTUAL_LIKE 지정)
+DROP TRIGGER IF EXISTS trg_match_action_after_insert$$
+CREATE TRIGGER trg_match_action_after_insert
+AFTER INSERT ON match_actions
+FOR EACH ROW
+BEGIN
+    DECLARE v_reverse_exists INT DEFAULT 0;
+
+    IF NEW.action_type IN ('LIKE', 'SUPER_LIKE') THEN
+        SELECT COUNT(*) INTO v_reverse_exists
+          FROM match_actions
+         WHERE actor_id = NEW.target_id
+           AND target_id = NEW.actor_id
+           AND action_type IN ('LIKE', 'SUPER_LIKE');
+
+        IF v_reverse_exists > 0 THEN
+            INSERT IGNORE INTO match_results (user_a_id, user_b_id, trigger_type)
+            VALUES (
+                LEAST(NEW.actor_id, NEW.target_id),
+                GREATEST(NEW.actor_id, NEW.target_id),
+                'MUTUAL_LIKE'
+            );
+        END IF;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+
+-- ============================================================================
+-- [9. 초기 마스터 데이터 예시]
+-- ============================================================================
+
+-- INSERT INTO item_catalog (item_code, name, star_cost, category, effect_duration_min) VALUES
+-- ('POST_PIN',       '글 상단 고정',        3, 'POST_IT', 60),
+-- ('PROFILE_BOOST',  '프로필 부스터',       8, 'MATCH',   30),
+-- ('SUPER_LIKE',     '강조 좋아요',         3, 'MATCH',   30),
+-- ('PRE_MESSAGE',    '메시지 먼저 보내기',  5, 'MATCH',   NULL),
+-- ('UNDO',           '되돌리기',            1, 'MATCH',   NULL);
+
+-- INSERT INTO subscription_plan (plan_code, name, price, duration_days, monthly_bonus_items, benefits) VALUES
+-- ('BASIC',   '무료',   0,     0,
+--  NULL,
+--  JSON_OBJECT(
+--      'POST_WRITE', 2, 'POST_REPLY', 5, 'POST_LIGHTNING', 1,
+--      'MATCH_UNDO', 1, 'post_keep_days', 1,
+--      'view_received_likes_minutes', 30,
+--      'ad_reward_reply_per_day', 3
+--  )
+-- ),
+-- ('PREMIUM', '프리미엄', 9900, 30,
+--  JSON_OBJECT('SUPER_LIKE', 5, 'PROFILE_BOOST', 1, 'PRE_MESSAGE', 3),
+--  JSON_OBJECT(
+--      'unlimited_post', true, 'unlimited_reply', true, 'post_keep_days', 3,
+--      'chat_cancel', true, 'daily_pick', true, 'unlimited_undo', true,
+--      'view_full_visitors', true, 'view_all_received_likes', true
+--  )
+-- );
+
+-- INSERT INTO categories (code, name, type) VALUES
+-- ('BAL_LOVE',    '연애 밸런스',   'BALANCE'),
+-- ('BAL_DAILY',   '일상 밸런스',   'BALANCE'),
+-- ('POST_DAILY',  '일상 포스트잇', 'POST_IT'),
+-- ('POST_LIGHTN', '번개',          'POST_IT');
+
+
+
+-- ============================================================================
+-- [10. 배치/스케줄러 운영 메모]
+-- ============================================================================
+--
+-- [10-1] 밸런스 게임 예약 게시 (매 분)
+--   UPDATE bal_game
+--      SET status = 'PUBLISHED'
+--    WHERE status = 'SCHEDULED'
+--      AND scheduled_at <= NOW();
+--   → ShedLock 이름: "publishScheduledBalanceGames"
+--
+-- [10-2] 포스트잇 만료 숨김 (10분)
+--   UPDATE post_it
+--      SET is_hidden = TRUE
+--    WHERE is_hidden = FALSE
+--      AND expires_at < NOW();
+--
+-- [10-3] 포스트잇 상단 고정 해제 (10분)
+--   UPDATE post_it
+--      SET pinned_until = NULL
+--    WHERE pinned_until IS NOT NULL
+--      AND pinned_until < NOW();
+--
+-- [10-4] 프로필 부스터 만료 해제 (10분)
+--   UPDATE user_profile
+--      SET boost_expires_at = NULL
+--    WHERE boost_expires_at IS NOT NULL
+--      AND boost_expires_at < NOW();
+--
+-- [10-5] 월간 보너스 지급 (매일 04:00)
+--   1) SELECT user_id FROM user_subscription
+--       WHERE is_active = TRUE AND end_date > NOW()
+--         AND (last_bonus_grant_at IS NULL
+--              OR last_bonus_grant_at <= NOW() - INTERVAL 30 DAY);
+--   2) 플랜의 monthly_bonus_items JSON 파싱 → 각 아이템별로
+--      user_inventory (source='MONTHLY_BONUS') UPSERT.
+--      기존 MONTHLY_BONUS 행이 있으면 quantity 덮어쓰기 (미사용분 소멸).
+--   3) last_bonus_grant_at = NOW() 업데이트.
+--
+-- [10-6] 오래된 데이터 정리 (월 1회)
+--   - user_daily_usage : usage_date < NOW() - INTERVAL 30 DAY
+--   - profile_visit    : create_time < NOW() - INTERVAL 30 DAY
+--   - match_actions    : PASS 이고 expires_at < NOW() - INTERVAL 1 YEAR → 백업 후 DELETE
+--
+-- [10-7] 매칭 풀 재계산
+--   - 새벽 전체: active 유저 페어 전수 재계산
+--   - 프로필 수정 이벤트: 관련 페어만 비동기 큐로
+--   - 매칭 응답 시: target.update_time > match_pool.calculated_at 이면 즉석 재계산
+--
+-- [10-8] 광고 보상 일일 상한 체크 (실시간)
+--   SELECT COALESCE(SUM(reward_amount), 0)
+--     FROM ad_reward_log
+--    WHERE user_id = :me
+--      AND reward_type = 'AD_REPLY_TICKET'
+--      AND reward_date = CURDATE();
+--   → 플랜의 ad_reward_reply_per_day 값과 비교
+--
+-- [10-9] 알림 발송 워커 (실시간 큐 또는 30초 주기)
+--   SELECT * FROM notification_log
+--    WHERE status = 'PENDING'
+--    ORDER BY create_time ASC
+--    LIMIT 100;
+--   → 각 row 에 대해:
+--     1) device_token WHERE user_id=recipient AND is_active=TRUE 조회
+--     2) notification_setting 체크 → 카테고리 off 또는 DND 구간이면 SUPPRESSED
+--     3) FCM HTTP v1 호출 → 성공 시 SENT+sent_at, 실패 시 FAILED+error_message
+--     4) 재시도는 exponential backoff, retry_count 최대 3회
+--   → ShedLock name='notificationDispatcher'
+--
+-- [10-10] 비활성 디바이스 토큰 정리 (매일 05:00)
+--   UPDATE device_token SET is_active = FALSE
+--    WHERE is_active = TRUE AND last_used_at < NOW() - INTERVAL 90 DAY;
+--   → FCM 에서 UNREGISTERED / INVALID_ARGUMENT 응답 받은 토큰도 즉시 비활성화
+--
+-- [10-11] 오래된 알림 로그 정리 (월 1회)
+--   DELETE FROM notification_log
+--    WHERE create_time < NOW() - INTERVAL 90 DAY
+--      AND read_at IS NOT NULL;
+--   → 인박스 용도는 90일 보관, 분석 필요 데이터는 별도 백업 테이블로 이관
+--
+-- [10-12] 탈퇴 유저 개인정보 파기 (매일 03:00)  ★ v1.7 신규
+--   SELECT id FROM users
+--    WHERE is_withdraw = TRUE
+--      AND withdraw_date < NOW() - INTERVAL 30 DAY;
+--   각 유저에 대해:
+--     1) R2 사진 파일 전부 삭제 (user_photo → r2_key 조회 후 DELETE)
+--     2) user_photo / user_profile / user_interest / user_ideal /
+--        user_consent / device_token / notification_setting DELETE
+--     3) users.phone/login_id/password/nickname 익명화
+--     4) user_destruction_log 에 기록 (destroyed_fields JSON 포함)
+--   → ShedLock name='destroyWithdrawnUsers', 30일 유예 배치
+--
+-- [10-13] 채팅방 3일 무응답 알림 (매일 09:00)  ★ v1.9 에서 POST·MATCH 통합
+--   SELECT r.id, r.uuid, r.room_type, r.user_a_id, r.user_b_id
+--     FROM chat_room r
+--    WHERE r.last_message_at < NOW() - INTERVAL 3 DAY
+--      AND r.is_active = TRUE
+--      AND r.stale_notified_at IS NULL
+--      AND NOT EXISTS ( 양쪽 모두 메시지 보낸 방 — 아래 조건으로 제외 );
+--   각 방에 대해:
+--     1) 첫 메시지 보낸 사람(initiator) 채팅방에 SYSTEM 메시지 삽입
+--        MATCH: "아직 답장이 없네요. 다른 분들도 살펴볼까요?"
+--        POST : "아직 답장이 없네요. 다른 포스트잇도 살펴볼까요?"
+--     2) 받은 사람(상대)에게 FCM 푸시 알림 발송
+--        MATCH: MATCH_CHAT_STALE "매칭 후 답장하지 않은 채팅방이 있어요"
+--        POST : POST_CHAT_STALE  "포스트잇 답장에 아직 회신하지 않은 채팅방이 있어요"
+--     3) stale_notified_at = NOW() 로 갱신 (중복 방지)
+--   → ShedLock name='chatStaleNotifier'
+--   → room_type 구분 없이 같은 쿼리로 처리, 문구만 Service 에서 분기
+--
+-- [10-14] 결제 PENDING 만료 (매 10분)  ★ v1.7 신규
+--   UPDATE payment_logs SET status = 'FAILED',
+--                           error_reason = '결제 미완료 자동 만료'
+--    WHERE status = 'PENDING'
+--      AND create_time < NOW() - INTERVAL 24 HOUR;
+--   → PG 웹훅이 늦게 와도 order_id UNIQUE 로 중복 방지됨
+--
+-- [10-15] 약관 버전 갱신 시 재동의 유도 (이벤트 기반)  ★ v1.7 신규
+--   · 이용약관 또는 개인정보 처리방침이 개정되면 policy_version 변경
+--   · 유저 로그인 시 최신 버전 동의 여부 확인 → 미동의면 동의 화면 노출
+--   · 동의 완료 시 user_consent 에 새 행 insert (과거 기록 유지)
+--
+-- [10-16] 유저 제재 자동 해제 (매일 00:00)  ★ v1.8 신규
+--   @Scheduled(cron = "0 0 0 * * *")
+--   @SchedulerLock(name = "autoLiftSuspension")
+--   UPDATE user_suspension
+--      SET is_lifted = TRUE,
+--          lifted_at = NOW(),
+--          lifted_reason = '자동 해제 (정지 기간 만료)'
+--    WHERE is_lifted = FALSE
+--      AND ends_at IS NOT NULL
+--      AND ends_at < NOW();
+--   → 영구정지(ends_at=NULL)는 해제 대상 아님
+--   → 해제된 유저에게 "정지 기간이 만료되어 서비스를 다시 이용할 수 있습니다" 푸시
+--
+-- [10-17] 재무 정산 일별 집계 (매일 00:30)  ★ v1.8 신규
+--   @Scheduled(cron = "0 30 0 * * *")
+--   @SchedulerLock(name = "dailyPaymentSummary")
+--   → 전일(yesterday) 기준 payment_logs, user_subscription 등 집계
+--   → INSERT INTO payment_daily_summary ... ON DUPLICATE KEY UPDATE
+--   → DAU 는 activity_log 또는 last_login_time 기반 집계
+--   → 재집계 가능 (동일 날짜 재실행 시 UPDATE)
+--
+-- [10-18] 예약 공지 발송 (매 5분)  ★ v1.8 신규
+--   @Scheduled(cron = "0 */5 * * * *")
+--   @SchedulerLock(name = "dispatchScheduledNotice")
+--   SELECT id FROM notice
+--    WHERE status = 'SCHEDULED' AND scheduled_at <= NOW();
+--   → 각 건에 대해 FCM 일괄 발송 → status='SENT', sent_at=NOW()
+--
+-- ============================================================================
+-- [11. 추후 업데이트 예정 (DDL 에 아직 반영 안 됨, 향후 ALTER 예정)]
+-- ============================================================================
+-- 아래 항목들은 MVP 범위 밖으로 결정된 것들. 실제 도입 시점에 ALTER TABLE 또는
+-- 신규 테이블 생성으로 반영 예정. 기획·법적 검토 완료된 후 진행.
+--
+-- [11-1] Phase 2: TOTP 2FA (Google Authenticator 방식)
+--   ALTER TABLE admin_account ADD COLUMN totp_secret VARCHAR(255) DEFAULT NULL;
+--   ALTER TABLE admin_account ADD COLUMN totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+--   · totp_secret: AES 암호화된 비밀키 저장
+--   · 로그인 플로우: ID/PW 검증 → 6자리 코드 입력 → verify
+--   · admin_login_log.totp_verified 컬럼은 이미 존재 (Phase 1 에선 NULL)
+--
+-- [11-2] Phase 2: 관리자 계정 잠금 정책 강화
+--   ALTER TABLE admin_account ADD COLUMN failed_login_count INT NOT NULL DEFAULT 0;
+--   ALTER TABLE admin_account ADD COLUMN locked_until DATETIME DEFAULT NULL;
+--   · 5회 연속 실패 시 10분 계정 잠금
+--   · 배치: 매 10분마다 locked_until 지난 건 failed_login_count=0
+--
+-- [11-3] Phase 2: IP 화이트리스트
+--   · 옵션 A: Cloudflare WAF Custom Rules (DDL 불필요)
+--   · 옵션 B: DB 테이블 기반
+--     CREATE TABLE admin_allowed_ip (
+--       id BIGINT PK, ip_or_cidr VARCHAR(45), description VARCHAR(200),
+--       is_active BOOLEAN, create_user BIGINT, ...
+--     );
+--
+-- [11-4] 비밀번호 재사용 금지 정책
+--   CREATE TABLE admin_password_history (
+--     id BIGINT PK, admin_id BIGINT FK, password_hash VARCHAR(255),
+--     changed_at DATETIME
+--   );
+--   · 최근 사용한 비밀번호 N개 재사용 금지
+--   · ALTER TABLE admin_account ADD COLUMN password_changed_at DATETIME;
+--   · 90일 주기 변경 정책 도입 시 사용
+--
+-- [11-5] 유저 사칭 로그인 (MVP 제외, Phase 2 검토)
+--   · 관리자가 특정 유저 세션에 "읽기 전용" 으로 진입
+--   · 메시지 전송·결제 등 쓰기 작업 차단
+--   · 모든 사칭 세션은 audit_log + 유저에게 알림
+--   · CREATE TABLE admin_impersonation_log (...)
+--
+-- [11-6] 관리자 휴가·대리 권한 (Phase 2)
+--   · 관리자가 휴가 중일 때 다른 관리자가 대신 처리
+--   · admin_account.is_on_leave, delegate_admin_id 등
+--
+-- [11-7] 관리자 활동 Slack 알림 연동
+--   · 영구정지, 고액 환불 등 중요 액션 발생 시 Slack 채널 알림
+--   · 외부 연동이므로 DDL 변경 없음 (설정만 추가)
+--
+-- [11-8] 모바일 앱 관리자 지문·Face ID 생체인증
+--   · 앱 진입 시 OS 레벨 생체인증 호출
+--   · DDL 변경 없음 (클라이언트 구현)
+--
+-- [11-9] 재가입 차단 리스트 (user_blacklist)
+--   CREATE TABLE user_blacklist (
+--     id BIGINT PK, ci_hash VARCHAR(128) UNIQUE,
+--     reason VARCHAR(500), banned_at DATETIME, banned_by BIGINT FK
+--   );
+--   · 영구정지 유저의 CI/DI 해시 저장 → 본인인증 단계에서 매칭 시 가입 차단
+--   · 약관상 이미 예고된 기능
+--
+-- [11-10] A/B 테스트 인프라
+--   · ALTER TABLE users ADD COLUMN experiment_bucket VARCHAR(50);
+--   · 유저 1만 이상 시점 도입
+--
+-- [11-11] 카테고리·마스터 데이터 관리 UI (CMS-lite)
+--   · 기존 categories 테이블 관리 API 만 추가
+--
+-- [11-12] 광고 수익 리포트
+--   · 광고 SDK 연동 이후 광고 노출/클릭 로그 테이블 설계
+--
+-- [11-13] 피크타임 대응·캐시 레이어 (Redis)
+--   · WebSocket pub/sub, 세션, 매칭 피드 캐시
+--
+-- [11-14] 실시간 채팅 스팸 필터
+--   · 키워드 차단, AI 기반 사기 패턴 탐지
+--
+-- [11-15] 차단 우회 대응 (디바이스 핑거프린팅)
+--
+
+-- ============================================================================
+-- [12. 후처리 FK — admin_account 참조]  ★ v2.0 신규
+-- ============================================================================
+-- 아래 FK 들은 참조 대상(admin_account)이 스키마 후반부에 정의되어
+-- CREATE TABLE 시점에 추가할 수 없으므로 별도 ALTER 로 연결한다.
+-- admin_account 테이블이 생성된 후 실행되어야 함 (같은 스크립트 내 순서 기준).
+-- ============================================================================
+
+ALTER TABLE audit_log
+    ADD CONSTRAINT fk_audit_admin
+        FOREIGN KEY (admin_id) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT;
+-- [v2.0] admin_id → admin_account(id). 관리자 삭제 금지 정책 (RESTRICT)
+
+ALTER TABLE report
+    ADD CONSTRAINT fk_report_admin_processor
+        FOREIGN KEY (admin_processed_by) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE SET NULL;
+-- [v2.0] 신고 처리 관리자 FK. 관리자 비활성화 시 SET NULL (신고 이력 보존)
+
+ALTER TABLE user_profile
+    ADD CONSTRAINT fk_profile_reviewer_deferred
+        FOREIGN KEY (profile_reviewed_by) REFERENCES admin_account(id)
+        ON UPDATE CASCADE ON DELETE SET NULL;
+-- [v2.1] 프로필 심사 관리자 FK. admin_account 보다 user_profile 이 먼저 생성되므로 후처리
+
+
+-- ============================================================================
+-- END OF SCHEMA v2.1
+-- ============================================================================

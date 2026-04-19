@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "Bash(xargs grep *)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(npx expo *)",
+      "Bash(npx vite *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:5173/src/main.tsx)",
+      "Bash(curl -s \"http://localhost:5173/src/App.tsx\")",
+      "Bash(kill bdr2phjpi *)",
+      "Bash(node -e \"console.log\\(require.resolve\\('react'\\)\\)\")",
+      "Bash(node -e \"console.log\\('react:', require.resolve\\('react'\\)\\); console.log\\('react-dom:', require.resolve\\('react-dom'\\)\\); console.log\\('react-dom/client:', require.resolve\\('react-dom/client'\\)\\);\")",
+      "Bash(wait)",
+      "Bash(echo \"EXIT: $?\")"
+    ]
+  }
+}

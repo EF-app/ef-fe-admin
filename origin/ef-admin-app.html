@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>관리자 패널</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Square+Neo:wght@400;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #9686BF;
+  --primary-light: #C4B5E8;
+  --primary-dark: #7A6BA3;
+  --primary-bg: #EDE8F7;
+  --bg: #F5F3F1;
+  --white: #FFFFFF;
+  --text: #2D2640;
+  --text-light: #7A7490;
+  --border: #E2DFF0;
+  --success: #6BC98A;
+  --success-bg: #EDFBF3;
+  --danger: #E86B8B;
+  --danger-bg: #FEF0F4;
+  --warning: #F0A840;
+  --warning-bg: #FFF5E6;
+  --info: #60A8D0;
+  --info-bg: #EBF6FF;
+  --shadow: 0 4px 20px rgba(150,134,191,0.12);
+  --shadow-card: 0 2px 12px rgba(150,134,191,0.1);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nanum Square Neo', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ───── TOP BAR ───── */
+.top-bar {
+  background: var(--white);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(150,134,191,0.08);
+}
+.top-bar .logo {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--primary);
+  letter-spacing: -0.5px;
+}
+.top-bar .logo span { color: var(--text); }
+.admin-badge {
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* ───── TAB NAV ───── */
+.tab-nav {
+  background: var(--white);
+  display: flex;
+  border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  position: sticky;
+  top: 61px;
+  z-index: 99;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-btn {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.tab-btn.active {
+  color: var(--primary);
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0; right: 0;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
+}
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  padding: 0 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ───── CONTENT ───── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px;
+}
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ───── SECTIONS ───── */
+.section { padding: 20px 16px 0; }
+.section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-light);
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* ───── CARDS ───── */
+.card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+}
+.card + .card { margin-top: 10px; }
+
+/* ───── STAT CARDS ───── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 20px 16px 0;
+}
+.stat-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 14px 12px;
+  text-align: center;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+}
+.stat-card .stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-light);
+  margin-bottom: 6px;
+}
+.stat-card .stat-value {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--primary);
+  line-height: 1;
+}
+.stat-card .stat-unit {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+
+/* ───── QUICK ACTIONS ───── */
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.quick-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.quick-card:active { transform: scale(0.97); }
+.quick-card .qc-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.quick-card .qc-label { font-size: 12px; font-weight: 700; }
+.quick-card .qc-count { font-size: 20px; font-weight: 900; }
+.qc-danger .qc-icon { background: var(--danger-bg); }
+.qc-danger .qc-count { color: var(--danger); }
+.qc-warning .qc-icon { background: var(--warning-bg); }
+.qc-warning .qc-count { color: var(--warning); }
+
+/* ───── NOTICE LIST ───── */
+.notice-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.notice-item:last-child { border-bottom: none; padding-bottom: 0; }
+.notice-item:first-child { padding-top: 0; }
+.notice-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.notice-meta { font-size: 11px; color: var(--text-light); font-weight: 700; }
+
+/* ───── SEARCH ───── */
+.search-box {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.search-input {
+  flex: 1;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--primary); }
+.search-input::placeholder { color: var(--text-light); }
+.btn {
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-weight: 800;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn:active { transform: scale(0.96); }
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 13px;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.btn-outline {
+  background: var(--white);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.btn-success {
+  background: var(--success);
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.btn-ghost {
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+/* ───── USER CARD ───── */
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.user-card:active { transform: scale(0.98); }
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--primary-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.user-info .user-name { font-size: 14px; font-weight: 800; }
+.user-info .user-id { font-size: 11px; color: var(--text-light); font-weight: 700; }
+.user-info .user-joined { font-size: 11px; color: var(--text-light); font-weight: 700; margin-top: 2px; }
+.status-badge {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.badge-active { background: var(--success-bg); color: #3DA861; }
+.badge-suspended { background: var(--danger-bg); color: var(--danger); }
+.badge-warned { background: var(--warning-bg); color: #C07010; }
+.badge-banned { background: #f0e0e0; color: #900; }
+
+/* ───── DETAIL VIEW ───── */
+.detail-header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  padding: 24px 16px 20px;
+  color: #fff;
+  text-align: center;
+}
+.detail-header .big-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  margin: 0 auto 12px;
+  border: 3px solid rgba(255,255,255,0.4);
+}
+.detail-header .dh-name { font-size: 18px; font-weight: 900; }
+.detail-header .dh-id { font-size: 12px; opacity: 0.8; margin-top: 2px; font-weight: 700; }
+
+.sub-tabs {
+  display: flex;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.sub-tab {
+  flex: 1;
+  padding: 10px 0;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-light);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+}
+.sub-tab.active { color: var(--primary); }
+.sub-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
+}
+.sub-pane { display: none; padding: 16px; }
+.sub-pane.active { display: block; }
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { font-weight: 700; color: var(--text-light); }
+.info-value { font-weight: 800; }
+
+.history-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+.history-item:last-child { border-bottom: none; }
+.history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.history-text { font-size: 12px; font-weight: 700; line-height: 1.5; }
+.history-time { font-size: 10px; color: var(--text-light); font-weight: 700; margin-top: 2px; }
+
+/* ───── BOTTOM ACTION BAR ───── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--white);
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  box-shadow: 0 -4px 20px rgba(150,134,191,0.1);
+  z-index: 200;
+}
+.bottom-bar .btn { flex: 1; padding: 12px; font-size: 12px; border-radius: var(--radius-sm); }
+
+/* ───── FILTER ROW ───── */
+.filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-chip.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ───── REPORT CARD ───── */
+.report-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.report-card:active { transform: scale(0.98); }
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.report-type {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+.report-time { font-size: 11px; color: var(--text-light); font-weight: 700; }
+.report-preview { font-size: 12px; font-weight: 700; line-height: 1.5; color: var(--text); margin-bottom: 6px; }
+.report-reporter { font-size: 11px; color: var(--text-light); font-weight: 700; }
+
+/* ───── PAYMENT CARD ───── */
+.payment-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.payment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.payment-amount { font-size: 18px; font-weight: 900; color: var(--text); }
+.payment-status { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+.status-pending { background: var(--warning-bg); color: #C07010; }
+.status-approved { background: var(--success-bg); color: #3DA861; }
+.status-rejected { background: var(--danger-bg); color: var(--danger); }
+.payment-detail { font-size: 12px; font-weight: 700; color: var(--text-light); margin-bottom: 10px; }
+.validation-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.validation-chip {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.v-ok { background: var(--success-bg); color: #3DA861; }
+.v-fail { background: var(--danger-bg); color: var(--danger); }
+.payment-actions { display: flex; gap: 8px; }
+.payment-actions .btn { flex: 1; }
+
+/* ───── BALANCE GAME CARD ───── */
+.content-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.content-q { font-size: 13px; font-weight: 800; line-height: 1.5; margin-bottom: 8px; }
+.content-options {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.option-pill {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+}
+.content-actions { display: flex; gap: 8px; }
+.content-actions .btn { flex: 1; }
+
+/* ───── NOTICE WRITE ───── */
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 12px; font-weight: 800; color: var(--text); margin-bottom: 6px; display: block; }
+.form-input {
+  width: 100%;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-input:focus { border-color: var(--primary); }
+.form-textarea {
+  width: 100%;
+  min-height: 120px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+.form-textarea:focus { border-color: var(--primary); }
+
+/* ───── SELECT ───── */
+.form-select {
+  width: 100%;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239686BF' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+.form-select:focus { border-color: var(--primary); }
+
+/* ───── MODAL ───── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(45,38,64,0.5);
+  z-index: 500;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--white);
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  max-width: 480px;
+  padding: 24px 20px;
+  animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.modal-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 20px;
+}
+.modal-title {
+  font-size: 17px;
+  font-weight: 900;
+  text-align: center;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.modal-subtitle {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-light);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.modal-warning {
+  background: #FFF3E0;
+  border: 1.5px solid #FFB74D;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #E65100;
+  line-height: 1.5;
+  text-align: center;
+}
+.modal-info {
+  background: var(--primary-bg);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  line-height: 1.6;
+}
+.modal-info .mi-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+}
+.modal-actions .btn {
+  flex: 1;
+  padding: 14px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+}
+
+/* ───── EMPTY STATE ───── */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-light);
+}
+.empty-state .es-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-state .es-text { font-size: 13px; font-weight: 700; }
+
+/* ───── BACK BTN ───── */
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* ───── NOTICE WRITE SECTION ───── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.published-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.tag-draft { background: var(--bg); color: var(--text-light); }
+.tag-scheduled { background: var(--info-bg); color: var(--info); }
+.tag-published { background: var(--success-bg); color: #3DA861; }
+.tag-hidden { background: var(--danger-bg); color: var(--danger); }
+.tag-archived { background: #ece9f0; color: #888; }
+.tag-pending { background: var(--warning-bg); color: #C07010; }
+
+/* ───── TOGGLE ───── */
+.toggle-group {
+  display: flex;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.toggle-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 7px;
+  font-family: 'Nanum Square Neo', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  background: none;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.toggle-btn.active {
+  background: var(--white);
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(150,134,191,0.15);
+}
+
+/* ───── AUTO HIDDEN SECTION ───── */
+.auto-hidden-card {
+  background: var(--danger-bg);
+  border: 1.5px solid #F5B8C8;
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.auto-hidden-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--danger);
+  margin-bottom: 6px;
+}
+
+/* ───── DATE INPUT ───── */
+.date-row {
+  display: flex;
+  gap: 8px;
+}
+.date-row .form-input { flex: 1; }
+
+/* ───── PUSH NOTIF ───── */
+.push-notif {
+  position: fixed;
+  top: 20px;
+  right: 16px;
+  left: 16px;
+  background: var(--text);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  z-index: 999;
+  display: none;
+  animation: slideDown 0.3s ease;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+.push-notif.show { display: block; }
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.push-notif-title { font-size: 13px; font-weight: 900; margin-bottom: 2px; }
+
+/* ───── DIVIDER ───── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+
+/* ───── STEP INDICATOR ───── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.step-dot.active { background: var(--primary); }
+.step-dot.done { background: var(--success); }
+
+/* ───── HIDDEN VIEWS ───── */
+.view { display: none; }
+.view.active { display: block; }
+
+/* animations */
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ───── BAL GAME FORM STYLES ───── */
+.bgform-topbar { display: flex; align-items: center; justify-content: space-between; background: var(--white); border-bottom: 1px solid var(--border); padding: 4px 12px; position: sticky; top: 61px; z-index: 90; gap: 8px; }
+.bgform-title { font-size: 15px; font-weight: 900; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; text-align: center; }
+.bgform-topbar-spacer { width: 72px; flex-shrink: 0; }
+.bgform-preview-wrap { padding: 16px 16px 0; }
+.bgform-preview-label { font-size: 11px; font-weight: 800; color: var(--text-light); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.bgform-preview-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 18px 14px; position: relative; }
+.bgform-preview-category { font-size: 11px; font-weight: 800; background: var(--primary-bg); color: var(--primary); display: inline-block; padding: 4px 12px; border-radius: 20px; margin-bottom: 14px; }
+/* 2카드 + VS 레이아웃 */
+.bgform-preview-vs-wrap { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
+.bgform-preview-side { background: #EEE9F6; border: 1px solid #DCD5EB; border-radius: 14px; padding: 22px 10px; text-align: center; min-height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.bgform-preview-subdesc { font-size: 11px; font-weight: 700; color: #A89CC8; line-height: 1.45; margin-bottom: 10px; word-break: keep-all; white-space: pre-wrap; }
+.bgform-preview-subdesc:empty { margin-bottom: 0; }
+.bgform-preview-main { font-size: 13px; font-weight: 900; color: #8C80B4; line-height: 1.45; word-break: keep-all; white-space: pre-wrap; letter-spacing: -0.3px; }
+.bgform-preview-vs-circle { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 900; display: flex; align-items: center; justify-content: center; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(150,134,191,0.3); flex-shrink: 0; }
+.bgform-body { padding: 16px; }
+.char-count { font-size: 10px; font-weight: 700; color: var(--text-light); text-align: right; margin-top: 4px; }
+.form-hint { font-size: 11px; font-weight: 700; color: var(--text-light); margin-top: 4px; }
+.required-dot { color: var(--danger); font-size: 14px; line-height: 1; }
+.status-radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.status-radio { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--bg); border: 1.5px solid var(--border); cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-light); transition: all 0.15s; }
+.status-radio input[type="radio"] { display: none; }
+.status-radio.active { border-color: var(--primary); background: var(--primary-bg); color: var(--primary); }
+.sr-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.sr-dot.tag-draft { background: var(--text-light); }
+.sr-dot.tag-scheduled { background: var(--info); }
+.sr-dot.tag-published { background: var(--success); }
+.sr-dot.tag-hidden { background: var(--danger); }
+.sr-dot.tag-archived { background: #aaa; }
+.status-warn { margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warning-bg); border: 1.5px solid #FFD080; font-size: 12px; font-weight: 700; color: #8B5500; line-height: 1.5; }
+.bgmeta-bar { padding: 10px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; gap: 12px; font-size: 11px; font-weight: 700; color: var(--text-light); overflow-x: auto; white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.bgmeta-bar::-webkit-scrollbar { display: none; }
+.bgmeta-bar span { flex-shrink: 0; }
+.bgmeta-bar span b { color: var(--text); }
+.vote-stat-card { background: var(--primary-bg); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+.vote-stat-title { font-size: 12px; font-weight: 800; color: var(--primary-dark); margin-bottom: 10px; }
+.vote-label-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.vote-bar { height: 8px; background: rgba(150,134,191,0.15); border-radius: 4px; overflow: hidden; }
+.vote-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.vote-a { background: var(--primary); }
+.vote-b { background: var(--primary-light); }
+.readonly-field { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--text-light); }
+.bglist-card { background: var(--white); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow-card); border: 1px solid var(--border); margin-bottom: 10px; }
+.bglist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.bglist-q { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 6px; line-height: 1.4; }
+.bglist-options { display: flex; gap: 6px; margin-bottom: 8px; }
+.bglist-option { flex: 1; padding: 10px 8px; background: #EEE9F6; border: 1.5px solid #DCD5EB; border-radius: var(--radius-sm); font-size: 11px; font-weight: 700; color: var(--text); text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.bglist-subdesc { font-size: 10px; font-weight: 700; color: #A89CC8; line-height: 1.4; word-break: keep-all; }
+.bglist-option-main { font-size: 12px; font-weight: 900; color: #8C80B4; line-height: 1.3; word-break: keep-all; }
+.bglist-option-count { font-size: 10px; font-weight: 700; color: var(--text-light); }
+.apply-memo { background: var(--warning-bg); border: 1px solid #FFD080; border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; font-weight: 700; color: #8B5500; line-height: 1.5; margin-bottom: 10px; }
+.bglist-meta { display: flex; gap: 10px; font-size: 10px; font-weight: 700; color: var(--text-light); align-items: center; flex-wrap: wrap; }
+.bglist-edit-btn { background: var(--primary-bg); color: var(--primary); border: none; border-radius: var(--radius-xs); padding: 5px 10px; font-family: 'Nanum Square Neo', sans-serif; font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+.bglist-edit-btn:hover { background: var(--primary); color: #fff; }
+.datetime-row { display: flex; gap: 8px; align-items: stretch; }
+.datetime-row .form-input { flex: 1; }
+.datetime-confirm-btn { padding: 0 16px; background: var(--primary); color: #fff; font-family: 'Nanum Square Neo', sans-serif; font-size: 12px; font-weight: 800; border: none; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.datetime-confirm-btn:hover { background: var(--primary-dark); }
+.datetime-confirm-btn.confirmed { background: var(--success); }
+.datetime-confirmed-label { margin-top: 8px; padding: 8px 12px; background: var(--success-bg); border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; color: #3DA861; display: none; }
+.datetime-confirmed-label.visible { display: block; }
+
+
+</style>
+</head>
+<body>
+
+<!-- PUSH NOTIFICATION -->
+<div class="push-notif" id="pushNotif">
+  <div class="push-notif-title">🚨 새 신고 접수</div>
+  <div>채팅내역 신고가 접수되었습니다 — 즉시 확인이 필요합니다</div>
+</div>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="logo">✦ <span>Admin</span>Panel</div>
+  <div class="admin-badge">ADMIN</div>
+</div>
+
+<!-- TAB NAV -->
+<div class="tab-nav" id="tabNav">
+  <button class="tab-btn active" onclick="switchTab(0)">대시보드</button>
+  <button class="tab-btn" onclick="switchTab(1)">유저 관리</button>
+  <button class="tab-btn" onclick="switchTab(2)">신고 목록 <span class="tab-badge" id="reportBadge">7</span></button>
+  <button class="tab-btn" onclick="switchTab(3)">환불·결제</button>
+  <button class="tab-btn" onclick="switchTab(4)">글 관리</button>
+</div>
+
+<!-- CONTENT AREA -->
+<div class="content">
+
+<!-- ═══════════ TAB 1: DASHBOARD ═══════════ -->
+<div class="tab-pane active" id="tab0">
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">오늘 DAU</div>
+      <div class="stat-value">4,218</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">신규 가입</div>
+      <div class="stat-value">183</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">오늘 매출</div>
+      <div class="stat-value">327<span class="stat-unit">만</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">빠른 이동</div>
+    <div class="quick-actions">
+      <div class="quick-card qc-danger" onclick="switchTab(2)">
+        <div class="qc-icon">🚨</div>
+        <div>
+          <div class="qc-label">신고 대기</div>
+          <div class="qc-count">7건</div>
+        </div>
+      </div>
+      <div class="quick-card qc-warning" onclick="switchTab(3)">
+        <div class="qc-icon">💰</div>
+        <div>
+          <div class="qc-label">환불 대기</div>
+          <div class="qc-count">3건</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">최근 발송 공지</div>
+    <div class="card">
+      <div class="notice-item">
+        <div class="notice-title">🔔 5월 업데이트 안내</div>
+        <div class="notice-meta">2025.05.10 · 전체 발송 · 45,230명</div>
+      </div>
+      <div class="notice-item">
+        <div class="notice-title">⚙️ 서버 점검 예정 안내</div>
+        <div class="notice-meta">2025.05.07 · 전체 발송 · 45,100명</div>
+      </div>
+      <div class="notice-item">
+        <div class="notice-title">🎉 신기능 출시: 포스트잇 v2</div>
+        <div class="notice-meta">2025.05.03 · 전체 발송 · 44,900명</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TAB 2: USER MANAGEMENT ═══════════ -->
+<div class="tab-pane" id="tab1">
+
+  <!-- LIST VIEW -->
+  <div class="view active" id="userListView">
+    <div class="section" style="padding-bottom:12px;">
+      <div class="section-title">유저 검색</div>
+      <div class="search-box">
+        <input class="search-input" type="text" placeholder="ID 또는 닉네임 검색" id="userSearchInput">
+        <button class="btn btn-primary btn-sm" onclick="searchUsers()">검색</button>
+      </div>
+      <div id="userListContainer">
+        <div class="user-card fade-in" onclick="openUserDetail('user1')">
+          <div class="avatar">🐰</div>
+          <div class="user-info">
+            <div class="user-name">토끼귀엽다</div>
+            <div class="user-id">@rabbit_cutie</div>
+            <div class="user-joined">가입 2024.03.12</div>
+          </div>
+          <span class="status-badge badge-active">정상</span>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="user-card fade-in" onclick="openUserDetail('user2')">
+          <div class="avatar">🦊</div>
+          <div class="user-info">
+            <div class="user-name">여우야</div>
+            <div class="user-id">@foxfox</div>
+            <div class="user-joined">가입 2024.01.05</div>
+          </div>
+          <span class="status-badge badge-warned">경고</span>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="user-card fade-in" onclick="openUserDetail('user3')">
+          <div class="avatar">🐻</div>
+          <div class="user-info">
+            <div class="user-name">곰돌이</div>
+            <div class="user-id">@bear_bro</div>
+            <div class="user-joined">가입 2023.11.20</div>
+          </div>
+          <span class="status-badge badge-suspended">정지중</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL VIEW -->
+  <div class="view" id="userDetailView">
+    <button class="back-btn" onclick="closeUserDetail()">← 목록으로</button>
+    <div class="detail-header">
+      <div class="big-avatar" id="detailAvatar">🐰</div>
+      <div class="dh-name" id="detailName">토끼귀엽다</div>
+      <div class="dh-id" id="detailId">@rabbit_cutie · ID: 10482</div>
+    </div>
+
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="switchSubTab(0)">기본정보</button>
+      <button class="sub-tab" onclick="switchSubTab(1)">활동이력</button>
+      <button class="sub-tab" onclick="switchSubTab(2)">신고이력</button>
+      <button class="sub-tab" onclick="switchSubTab(3)">차단관계</button>
+    </div>
+
+    <!-- SUB PANE 0: 기본정보 -->
+    <div class="sub-pane active" id="subPane0">
+      <div class="card">
+        <div class="info-row">
+          <span class="info-label">가입일</span>
+          <span class="info-value">2024.03.12</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">이메일</span>
+          <span class="info-value">rabbit@email.com</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">상태</span>
+          <span class="status-badge badge-active">정상</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">경고 횟수</span>
+          <span class="info-value">0회</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">신고 횟수</span>
+          <span class="info-value">2회</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">구독</span>
+          <span class="info-value">프리미엄</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">프로필 상태</span>
+          <span class="status-badge badge-active">승인</span>
+        </div>
+      </div>
+      <div style="height:80px;"></div>
+    </div>
+
+    <!-- SUB PANE 1: 활동이력 -->
+    <div class="sub-pane" id="subPane1">
+      <div class="card">
+        <div class="history-item">
+          <div class="history-dot"></div>
+          <div>
+            <div class="history-text">밸런스게임 댓글 작성 — "치킨이지 당연하지"</div>
+            <div class="history-time">2025.05.10 14:32</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--success)"></div>
+          <div>
+            <div class="history-text">포스트잇 작성 — "오늘 너무 행복해요 🎵"</div>
+            <div class="history-time">2025.05.09 09:14</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--warning)"></div>
+          <div>
+            <div class="history-text">프리미엄 구독 결제 — 90,000원</div>
+            <div class="history-time">2025.05.01 18:00</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="history-dot"></div>
+          <div>
+            <div class="history-text">채팅 — @foxfox 와 대화 시작</div>
+            <div class="history-time">2025.04.28 22:11</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB PANE 2: 신고이력 -->
+    <div class="sub-pane" id="subPane2">
+      <div class="card">
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--danger)"></div>
+          <div>
+            <div class="history-text">포스트잇 신고 접수 — 욕설 포함</div>
+            <div class="history-time">2025.04.20 · 처리: 기각</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--warning)"></div>
+          <div>
+            <div class="history-text">채팅 신고 접수 — 음란한 내용</div>
+            <div class="history-time">2025.03.10 · 처리: 경고 발송</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB PANE 3: 차단관계 -->
+    <div class="sub-pane" id="subPane3">
+      <div class="card">
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--danger)"></div>
+          <div>
+            <div class="history-text"><b>내가 차단한</b> — @foxfox (여우야)</div>
+            <div class="history-time">2025.04.25</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="history-dot" style="background:var(--warning)"></div>
+          <div>
+            <div class="history-text"><b>나를 차단한</b> — @star_ming (별밍)</div>
+            <div class="history-time">2025.03.01</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ACTION BAR for USER DETAIL -->
+    <div class="bottom-bar" id="userDetailBar">
+      <button class="btn btn-outline" onclick="openModal('profileRejectModal')">프로필 반려</button>
+      <button class="btn btn-warning" onclick="openModal('sanctionModal')">제재</button>
+      <button class="btn btn-danger" onclick="openModal('forceLogoutModal')">로그아웃</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ TAB 3: REPORTS ═══════════ -->
+<div class="tab-pane" id="tab2">
+  <div class="section">
+    <div class="toggle-group">
+      <button class="toggle-btn active" onclick="switchReportFilter(this,'pending')">대기 중 <span class="tab-badge">7</span></button>
+      <button class="toggle-btn" onclick="switchReportFilter(this,'done')">처리 완료</button>
+    </div>
+
+    <!-- 자동 숨김 처리된 항목 -->
+    <div class="section-header">
+      <div class="section-title" style="margin:0">🤖 자동 숨김 처리</div>
+      <span class="published-tag tag-hidden">2건</span>
+    </div>
+    <div class="auto-hidden-card" id="autoHiddenSection">
+      <div class="auto-hidden-label">🚫 신고 10건 이상 — 자동 숨김 처리됨</div>
+      <div class="report-preview">밸런스게임 댓글: "야 솔직히 이건 아닌 것 같은데..."</div>
+      <div class="report-reporter">신고 12건 · 작성자: @user293</div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="openModal('reportDetailModal')">상세 보기</button>
+        <button class="btn btn-success btn-sm" onclick="showToast('숨김 해제되었습니다')">숨김 해제</button>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:16px;">신고 큐</div>
+    <div id="reportList">
+      <div class="report-card" onclick="openModal('reportDetailModal')">
+        <div class="report-header">
+          <span class="report-type">채팅내역</span>
+          <span class="report-time">10분 전</span>
+        </div>
+        <div class="report-preview">신고 내용: "상대방이 지속적으로 욕설을 합니다"</div>
+        <div class="report-reporter">신고자: @rabbit_cutie → 피신고: @foxfox</div>
+      </div>
+      <div class="report-card" onclick="openModal('reportDetailModal')">
+        <div class="report-header">
+          <span class="report-type">포스트잇글</span>
+          <span class="report-time">2시간 전</span>
+        </div>
+        <div class="report-preview">신고 내용: "불쾌한 내용이 포함되어 있습니다"</div>
+        <div class="report-reporter">신고자: @star_ming → 피신고: @bear_bro</div>
+      </div>
+      <div class="report-card" onclick="openModal('reportDetailModal')">
+        <div class="report-header">
+          <span class="report-type">유저프로필</span>
+          <span class="report-time">5시간 전</span>
+        </div>
+        <div class="report-preview">신고 내용: "프로필 사진이 부적절합니다"</div>
+        <div class="report-reporter">신고자: @cloud22 → 피신고: @rabbit_cutie</div>
+      </div>
+      <div class="report-card" onclick="openModal('reportDetailModal')">
+        <div class="report-header">
+          <span class="report-type">밸런스게임댓글</span>
+          <span class="report-time">어제</span>
+        </div>
+        <div class="report-preview">신고 내용: "헤이트 스피치 포함"</div>
+        <div class="report-reporter">신고자: @pine_tree → 피신고: @wolf99</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TAB 4: PAYMENT ═══════════ -->
+<div class="tab-pane" id="tab3">
+  <div class="section">
+    <div class="section-title">결제 이력 검색</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div class="form-group" style="margin-bottom:10px;">
+        <input class="form-input" type="text" placeholder="유저 ID 또는 닉네임">
+      </div>
+      <div class="date-row">
+        <input class="form-input" type="date" value="2025-05-01">
+        <input class="form-input" type="date" value="2025-05-10">
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" style="width:100%;">검색</button>
+      </div>
+    </div>
+
+    <div class="section-title">환불 대기 큐</div>
+
+    <!-- PAYMENT CARD 1 (고액) -->
+    <div class="payment-card">
+      <div class="payment-row">
+        <span class="payment-amount">150,000원</span>
+        <span class="payment-status status-pending">환불 대기</span>
+      </div>
+      <div class="payment-detail">
+        @rabbit_cutie · 프리미엄 구독 3개월 · 결제 2025.04.10<br>
+        사유: 서비스 불만족
+      </div>
+      <div class="validation-row">
+        <span class="validation-chip v-ok">✓ 7일 이내</span>
+        <span class="validation-chip v-ok">✓ 미사용</span>
+        <span class="validation-chip v-fail">✗ 기능 사용됨</span>
+      </div>
+      <div class="payment-actions">
+        <button class="btn btn-danger" onclick="openRefundFlow(150000)">환불 승인</button>
+        <button class="btn btn-ghost" onclick="openModal('refundRejectModal')">거부</button>
+      </div>
+    </div>
+
+    <!-- PAYMENT CARD 2 (소액) -->
+    <div class="payment-card">
+      <div class="payment-row">
+        <span class="payment-amount">30,000원</span>
+        <span class="payment-status status-pending">환불 대기</span>
+      </div>
+      <div class="payment-detail">
+        @foxfox · 코인 패키지 · 결제 2025.05.08<br>
+        사유: 실수로 구매
+      </div>
+      <div class="validation-row">
+        <span class="validation-chip v-ok">✓ 7일 이내</span>
+        <span class="validation-chip v-ok">✓ 미사용</span>
+        <span class="validation-chip v-ok">✓ 기능 미사용</span>
+      </div>
+      <div class="payment-actions">
+        <button class="btn btn-danger" onclick="openRefundFlow(30000)">환불 승인</button>
+        <button class="btn btn-ghost" onclick="openModal('refundRejectModal')">거부</button>
+      </div>
+    </div>
+
+    <!-- PAYMENT CARD 3 (완료) -->
+    <div class="payment-card" style="opacity:0.7;">
+      <div class="payment-row">
+        <span class="payment-amount">60,000원</span>
+        <span class="payment-status status-approved">환불 완료</span>
+      </div>
+      <div class="payment-detail">
+        @bear_bro · 프리미엄 구독 1개월 · 결제 2025.04.02
+      </div>
+      <div class="validation-row">
+        <span class="validation-chip v-ok">✓ 승인 처리됨</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TAB 5: CONTENT MANAGEMENT ═══════════ -->
+<div class="tab-pane" id="tab4">
+
+  <!-- ── VIEW: 목록 (기본) ── -->
+  <div class="view active" id="contentListView">
+  <div class="section">
+
+    <!-- Balance Game Queue -->
+    <div class="section-title">밸런스게임 신청 큐</div>
+    <div class="filter-row" id="applyFilterRow">
+      <button class="filter-chip active" onclick="filterApply(this,'PENDING')">승인 대기 <span class="tab-badge" id="pendingBadge">0</span></button>
+      <button class="filter-chip" onclick="filterApply(this,'APPROVED')">승인 완료</button>
+      <button class="filter-chip" onclick="filterApply(this,'REJECTED')">승인 반려</button>
+      <button class="filter-chip" onclick="filterApply(this,'ALL')">전체</button>
+    </div>
+    <div id="applyList"></div>
+
+    <div class="divider"></div>
+
+    <!-- Balance Game List -->
+    <div class="section-header">
+      <div class="section-title" style="margin:0">밸런스게임 목록</div>
+      <button class="btn btn-primary btn-sm" onclick="openBalGameCreate()">+ 새 게임</button>
+    </div>
+    <div class="filter-row" id="balGameFilterRow">
+      <button class="filter-chip active" onclick="filterBalGame(this,'ALL')">전체</button>
+      <button class="filter-chip" onclick="filterBalGame(this,'DRAFT')">DRAFT</button>
+      <button class="filter-chip" onclick="filterBalGame(this,'SCHEDULED')">SCHEDULED</button>
+      <button class="filter-chip" onclick="filterBalGame(this,'PUBLISHED')">PUBLISHED</button>
+      <button class="filter-chip" onclick="filterBalGame(this,'HIDDEN')">HIDDEN</button>
+      <button class="filter-chip" onclick="filterBalGame(this,'ARCHIVED')">ARCHIVED</button>
+    </div>
+    <div id="balGameList">
+      <!-- JS로 렌더링 -->
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Notice Section -->
+    <div class="section-header">
+      <div class="section-title" style="margin:0">공지사항</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('noticeWriteModal')">+ 작성</button>
+    </div>
+    <div class="card">
+      <div class="notice-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="notice-title">🔔 5월 업데이트 안내</div>
+          <span class="published-tag tag-published">발송완료</span>
+        </div>
+        <div class="notice-meta">2025.05.10 · 45,230명</div>
+      </div>
+      <div class="notice-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="notice-title">⚙️ 서버 점검 예정 안내</div>
+          <span class="published-tag tag-published">발송완료</span>
+        </div>
+        <div class="notice-meta">2025.05.07 · 45,100명</div>
+      </div>
+      <div class="notice-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="notice-title">📅 이벤트 공지</div>
+          <span class="published-tag tag-scheduled">예약 발송</span>
+        </div>
+        <div class="notice-meta">2025.05.15 15:00 예약 · 전체</div>
+      </div>
+    </div>
+  </div>
+  <div style="height:24px;"></div>
+  </div><!-- /contentListView -->
+
+  <!-- ── VIEW: 신규 작성 ── -->
+  <div class="view" id="contentCreateView">
+    <div class="bgform-topbar">
+      <button class="back-btn" onclick="closeBalGameForm()">← 목록으로</button>
+      <span class="bgform-title">새 밸런스게임</span>
+      <div class="bgform-topbar-spacer"></div>
+    </div>
+    <div class="bgform-preview-wrap">
+      <div class="bgform-preview-label">미리보기</div>
+      <div class="bgform-preview-card">
+        <div style="text-align:center;"><span class="bgform-preview-category" id="previewCategory">카테고리</span></div>
+        <div class="bgform-preview-vs-wrap">
+          <div class="bgform-preview-side">
+            <div class="bgform-preview-subdesc" id="previewDescA"></div>
+            <div class="bgform-preview-main" id="previewOptionA">선택지 A</div>
+          </div>
+          <div class="bgform-preview-vs-circle">VS</div>
+          <div class="bgform-preview-side">
+            <div class="bgform-preview-subdesc" id="previewDescB"></div>
+            <div class="bgform-preview-main" id="previewOptionB">선택지 B</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bgform-body">
+      <div class="form-group">
+        <label class="form-label">A 설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <input class="form-input" type="text" id="cf_descA" maxlength="255" placeholder="예: 출근길 지하철 개찰구 앞에서" oninput="updatePreview()">
+        <div class="char-count"><span id="cf_descALen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">A 선택지 <span class="required-dot">*</span></label>
+        <input class="form-input" type="text" id="cf_optionA" maxlength="255" placeholder="예: 교통카드 놓고 온 거 인지함" oninput="updatePreview()">
+        <div class="char-count"><span id="cf_aLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">B 설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <input class="form-input" type="text" id="cf_descB" maxlength="255" placeholder="예: 출근길 지하철 개찰구 앞에서" oninput="updatePreview()">
+        <div class="char-count"><span id="cf_descBLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">B 선택지 <span class="required-dot">*</span></label>
+        <input class="form-input" type="text" id="cf_optionB" maxlength="255" placeholder="예: 이어폰 두고 온 거 인지함" oninput="updatePreview()">
+        <div class="char-count"><span id="cf_bLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <textarea class="form-textarea" id="cf_description" maxlength="500" placeholder="게임에 대한 부연 설명을 입력하세요" oninput="document.getElementById('cf_descLen').textContent = this.value.length" style="min-height:80px;"></textarea>
+        <div class="char-count"><span id="cf_descLen">0</span>/500</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">카테고리 <span class="required-dot">*</span></label>
+        <select class="form-select" id="cf_category" onchange="updatePreview()">
+          <option value="">카테고리 선택</option>
+          <option value="1" data-emoji="🍽️">음식·맛집</option>
+          <option value="2" data-emoji="💭">일상·공감</option>
+          <option value="3" data-emoji="✈️">여행·라이프</option>
+          <option value="4" data-emoji="🎮">게임·취미</option>
+          <option value="5" data-emoji="💼">직장·커리어</option>
+          <option value="6" data-emoji="💕">연애·관계</option>
+          <option value="7" data-emoji="🌍">사회·이슈</option>
+          <option value="8" data-emoji="🎬">영화·드라마</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">게시 상태 <span class="required-dot">*</span></label>
+        <div class="status-radio-group">
+          <label class="status-radio active" id="sr_DRAFT"><input type="radio" name="cf_status" value="DRAFT" checked onchange="onStatusChange(this)"><span class="sr-dot tag-draft"></span>DRAFT</label>
+          <label class="status-radio" id="sr_SCHEDULED"><input type="radio" name="cf_status" value="SCHEDULED" onchange="onStatusChange(this)"><span class="sr-dot tag-scheduled"></span>SCHEDULED</label>
+          <label class="status-radio" id="sr_PUBLISHED"><input type="radio" name="cf_status" value="PUBLISHED" onchange="onStatusChange(this)"><span class="sr-dot tag-published"></span>PUBLISHED</label>
+          <label class="status-radio" id="sr_HIDDEN"><input type="radio" name="cf_status" value="HIDDEN" onchange="onStatusChange(this)"><span class="sr-dot tag-hidden"></span>HIDDEN</label>
+          <label class="status-radio" id="sr_ARCHIVED"><input type="radio" name="cf_status" value="ARCHIVED" onchange="onStatusChange(this)"><span class="sr-dot tag-archived"></span>ARCHIVED</label>
+        </div>
+      </div>
+      <div class="form-group" id="cf_scheduleGroup" style="display:none;">
+        <label class="form-label">예약 게시 시각 <span class="required-dot">*</span></label>
+        <div class="datetime-row">
+          <input class="form-input" type="datetime-local" id="cf_scheduledAt">
+          <button type="button" class="datetime-confirm-btn" id="cf_scheduledConfirmBtn" onclick="confirmScheduledAt('cf')">확인</button>
+        </div>
+        <div class="datetime-confirmed-label" id="cf_scheduledConfirmedLabel">✓ 예약 시각이 확인되었습니다</div>
+        <div class="form-hint">SCHEDULED 상태에서만 적용됩니다</div>
+      </div>
+      <div style="height:100px;"></div>
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-ghost" onclick="closeBalGameForm()" style="flex:none;padding:12px 20px;">취소</button>
+      <button class="btn btn-primary" onclick="submitBalGame('create')" style="flex:1;padding:12px;">저장하기</button>
+    </div>
+  </div><!-- /contentCreateView -->
+
+  <!-- ── VIEW: 수정 ── -->
+  <div class="view" id="contentEditView">
+    <div class="bgform-topbar">
+      <button class="back-btn" onclick="closeBalGameForm()">← 목록으로</button>
+      <span class="bgform-title">게임 수정</span>
+      <div class="bgform-topbar-spacer"></div>
+    </div>
+    <div class="bgmeta-bar" id="editMetaBar"></div>
+    <div class="bgform-preview-wrap">
+      <div class="bgform-preview-label">미리보기</div>
+      <div class="bgform-preview-card">
+        <div style="text-align:center;"><span class="bgform-preview-category" id="editPreviewCategory">카테고리</span></div>
+        <div class="bgform-preview-vs-wrap">
+          <div class="bgform-preview-side">
+            <div class="bgform-preview-subdesc" id="editPreviewDescA"></div>
+            <div class="bgform-preview-main" id="editPreviewOptionA">선택지 A</div>
+          </div>
+          <div class="bgform-preview-vs-circle">VS</div>
+          <div class="bgform-preview-side">
+            <div class="bgform-preview-subdesc" id="editPreviewDescB"></div>
+            <div class="bgform-preview-main" id="editPreviewOptionB">선택지 B</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bgform-body">
+      <div class="vote-stat-card">
+        <div class="vote-stat-title">📊 투표 현황 (읽기 전용)</div>
+        <div class="vote-bar-wrap">
+          <div class="vote-label-row"><span id="editStatA">A</span><span id="editStatACount">0표</span></div>
+          <div class="vote-bar"><div class="vote-bar-fill vote-a" id="editVoteBarA" style="width:50%"></div></div>
+          <div class="vote-label-row" style="margin-top:6px;"><span id="editStatB">B</span><span id="editStatBCount">0표</span></div>
+          <div class="vote-bar"><div class="vote-bar-fill vote-b" id="editVoteBarB" style="width:50%"></div></div>
+          <div style="margin-top:8px;display:flex;gap:16px;font-size:11px;font-weight:700;color:var(--text-light);">
+            <span>💬 댓글 <b id="editCommentCount" style="color:var(--text);">0</b>개</span>
+            <span>🔢 version <b id="editVersion" style="color:var(--text);">0</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">A 설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <input class="form-input" type="text" id="ef_descA" maxlength="255" placeholder="예: 출근길 지하철 개찰구 앞에서" oninput="updateEditPreview()">
+        <div class="char-count"><span id="ef_descALen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">A 선택지 <span class="required-dot">*</span></label>
+        <input class="form-input" type="text" id="ef_optionA" maxlength="255" placeholder="A 선택지" oninput="updateEditPreview()">
+        <div class="char-count"><span id="ef_aLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">B 설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <input class="form-input" type="text" id="ef_descB" maxlength="255" placeholder="예: 출근길 지하철 개찰구 앞에서" oninput="updateEditPreview()">
+        <div class="char-count"><span id="ef_descBLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">B 선택지 <span class="required-dot">*</span></label>
+        <input class="form-input" type="text" id="ef_optionB" maxlength="255" placeholder="B 선택지" oninput="updateEditPreview()">
+        <div class="char-count"><span id="ef_bLen">0</span>/255</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">설명 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+        <textarea class="form-textarea" id="ef_description" maxlength="500" placeholder="게임 설명" oninput="document.getElementById('ef_descLen').textContent = this.value.length" style="min-height:80px;"></textarea>
+        <div class="char-count"><span id="ef_descLen">0</span>/500</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">카테고리 <span class="required-dot">*</span></label>
+        <select class="form-select" id="ef_category" onchange="updateEditPreview()">
+          <option value="">카테고리 선택</option>
+          <option value="1" data-emoji="🍽️">음식·맛집</option>
+          <option value="2" data-emoji="💭">일상·공감</option>
+          <option value="3" data-emoji="✈️">여행·라이프</option>
+          <option value="4" data-emoji="🎮">게임·취미</option>
+          <option value="5" data-emoji="💼">직장·커리어</option>
+          <option value="6" data-emoji="💕">연애·관계</option>
+          <option value="7" data-emoji="🌍">사회·이슈</option>
+          <option value="8" data-emoji="🎬">영화·드라마</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">게시 상태 변경</label>
+        <div class="status-radio-group" id="editStatusGroup">
+          <label class="status-radio" id="esr_DRAFT"><input type="radio" name="ef_status" value="DRAFT" onchange="onEditStatusChange(this)"><span class="sr-dot tag-draft"></span>DRAFT</label>
+          <label class="status-radio" id="esr_SCHEDULED"><input type="radio" name="ef_status" value="SCHEDULED" onchange="onEditStatusChange(this)"><span class="sr-dot tag-scheduled"></span>SCHEDULED</label>
+          <label class="status-radio" id="esr_PUBLISHED"><input type="radio" name="ef_status" value="PUBLISHED" onchange="onEditStatusChange(this)"><span class="sr-dot tag-published"></span>PUBLISHED</label>
+          <label class="status-radio" id="esr_HIDDEN"><input type="radio" name="ef_status" value="HIDDEN" onchange="onEditStatusChange(this)"><span class="sr-dot tag-hidden"></span>HIDDEN</label>
+          <label class="status-radio" id="esr_ARCHIVED"><input type="radio" name="ef_status" value="ARCHIVED" onchange="onEditStatusChange(this)"><span class="sr-dot tag-archived"></span>ARCHIVED</label>
+        </div>
+        <div class="status-warn" id="editStatusWarn" style="display:none;"></div>
+      </div>
+      <div class="form-group" id="ef_scheduleGroup" style="display:none;">
+        <label class="form-label">예약 게시 시각 <span class="required-dot">*</span></label>
+        <div class="datetime-row">
+          <input class="form-input" type="datetime-local" id="ef_scheduledAt">
+          <button type="button" class="datetime-confirm-btn" id="ef_scheduledConfirmBtn" onclick="confirmScheduledAt('ef')">확인</button>
+        </div>
+        <div class="datetime-confirmed-label" id="ef_scheduledConfirmedLabel">✓ 예약 시각이 확인되었습니다</div>
+        <div class="form-hint">SCHEDULED 상태에서만 적용됩니다</div>
+      </div>
+      <div class="form-group" id="ef_applicantGroup" style="display:none;">
+        <label class="form-label">신청자</label>
+        <div class="readonly-field" id="ef_applicant"></div>
+      </div>
+      <div style="height:100px;"></div>
+    </div>
+    <div class="bottom-bar">
+      <button class="btn btn-ghost" onclick="closeBalGameForm()" style="flex:none;padding:12px 20px;">취소</button>
+      <button class="btn btn-primary" onclick="submitBalGame('edit')" style="flex:1;padding:12px;">변경 저장</button>
+    </div>
+  </div><!-- /contentEditView -->
+
+</div><!-- /tab4 -->
+
+</div> <!-- /content -->
+
+<!-- ════════════════════════ MODALS ════════════════════════ -->
+
+<!-- ── SANCTION MODAL ── -->
+<div class="modal-overlay" id="sanctionModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">제재 선택</div>
+    <div class="modal-subtitle">토끼귀엽다 (@rabbit_cutie) 에게<br>적용할 제재를 선택하세요</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+      <button class="btn btn-warning" style="width:100%;padding:14px;" onclick="closeModal('sanctionModal');openModal('warnConfirm1')">⚠️ 경고</button>
+      <button class="btn" style="width:100%;padding:14px;background:#F0A840;color:#fff;" onclick="closeModal('sanctionModal');openModal('suspendModal')">⏸ 일시 정지</button>
+      <button class="btn btn-danger" style="width:100%;padding:14px;" onclick="closeModal('sanctionModal');openModal('banConfirm1')">🚫 영구 정지</button>
+      <button class="btn btn-outline" style="width:100%;padding:14px;" onclick="closeModal('sanctionModal');openModal('nicknameModal')">✏️ 닉네임 강제 변경</button>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeModal('sanctionModal')">취소</button>
+  </div>
+</div>
+
+<!-- ── WARN CONFIRM 1 ── -->
+<div class="modal-overlay" id="warnConfirm1">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">경고 발송</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+      <div class="mi-row"><span>조치</span><b>경고 1회</b></div>
+      <div class="mi-row"><span>현재 경고</span><b>0회 → 1회</b></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">사유 (선택)</label>
+      <input class="form-input" type="text" placeholder="예: 욕설 포함 댓글">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('warnConfirm1')">취소</button>
+      <button class="btn btn-warning" onclick="closeModal('warnConfirm1');showToast('⚠️ 경고가 발송되었습니다')">경고 발송</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SUSPEND MODAL ── -->
+<div class="modal-overlay" id="suspendModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">일시 정지</div>
+    <div class="modal-subtitle">정지 기간을 선택하세요</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-outline" style="flex:1;padding:14px;" onclick="closeModal('suspendModal');openModal('suspendConfirm7')">7일 정지</button>
+      <button class="btn btn-danger" style="flex:1;padding:14px;" onclick="closeModal('suspendModal');openModal('suspendConfirm30')">30일 정지</button>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;padding:12px;" onclick="closeModal('suspendModal')">취소</button>
+  </div>
+</div>
+
+<!-- ── SUSPEND CONFIRM 7 ── -->
+<div class="modal-overlay" id="suspendConfirm7">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">7일 정지 확인</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+      <div class="mi-row"><span>기간</span><b>7일 (2025.05.10 ~ 05.17)</b></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">정지 사유</label>
+      <input class="form-input" type="text" placeholder="사유를 입력하세요">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('suspendConfirm7')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('suspendConfirm7');showToast('⏸ 7일 정지가 적용되었습니다')">정지 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SUSPEND CONFIRM 30 ── -->
+<div class="modal-overlay" id="suspendConfirm30">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">30일 정지 확인</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+      <div class="mi-row"><span>기간</span><b>30일 (2025.05.10 ~ 06.09)</b></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">정지 사유</label>
+      <input class="form-input" type="text" placeholder="사유를 입력하세요">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('suspendConfirm30')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('suspendConfirm30');showToast('⏸ 30일 정지가 적용되었습니다')">정지 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BAN CONFIRM 1 (사유 입력) ── -->
+<div class="modal-overlay" id="banConfirm1">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">영구 정지 — 1단계</div>
+    <div class="modal-subtitle">정지 사유를 입력하세요</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">정지 사유 (필수)</label>
+      <textarea class="form-textarea" placeholder="영구 정지 사유를 상세하게 입력하세요" id="banReason"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('banConfirm1')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('banConfirm1');openModal('banConfirm2')">다음</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BAN CONFIRM 2 (최종 경고) ── -->
+<div class="modal-overlay" id="banConfirm2">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot done"></div>
+      <div class="step-dot active"></div>
+    </div>
+    <div class="modal-title">영구 정지 — 최종 확인</div>
+    <div class="modal-warning">⚠️ 이 조치는 되돌릴 수 없습니다.<br>영구 정지 후 계정 복구가 불가합니다.</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+      <div class="mi-row"><span>조치</span><b>영구 정지</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('banConfirm2')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('banConfirm2');showToast('🚫 영구 정지가 적용되었습니다')">영구 정지 확정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NICKNAME CHANGE 1 ── -->
+<div class="modal-overlay" id="nicknameModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">닉네임 강제 변경 — 1단계</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>현재 닉네임</span><b>토끼귀엽다</b></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">새 닉네임</label>
+      <input class="form-input" type="text" placeholder="변경할 닉네임 입력" id="newNickname">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('nicknameModal')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('nicknameModal');openModal('nicknameConfirm2')">다음</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NICKNAME CHANGE 2 (알림 확인) ── -->
+<div class="modal-overlay" id="nicknameConfirm2">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot done"></div>
+      <div class="step-dot active"></div>
+    </div>
+    <div class="modal-title">닉네임 변경 — 최종 확인</div>
+    <div class="modal-warning">⚠️ 변경 시 유저에게 푸시 알림이 발송됩니다.</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>기존</span><b>토끼귀엽다</b></div>
+      <div class="mi-row"><span>변경</span><b>새닉네임예시</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('nicknameConfirm2')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('nicknameConfirm2');showToast('✏️ 닉네임이 변경되었습니다')">변경 확정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FORCE LOGOUT ── -->
+<div class="modal-overlay" id="forceLogoutModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">강제 로그아웃</div>
+    <div class="modal-subtitle">해당 유저를 모든 기기에서<br>즉시 로그아웃합니다</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>토끼귀엽다</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('forceLogoutModal')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('forceLogoutModal');showToast('🔒 강제 로그아웃 처리되었습니다')">로그아웃</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROFILE REJECT ── -->
+<div class="modal-overlay" id="profileRejectModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">프로필 반려</div>
+    <div class="modal-subtitle">유저에게 반려 사유가 전달됩니다</div>
+    <div class="form-group">
+      <label class="form-label">반려 사유</label>
+      <select class="form-select">
+        <option>부적절한 이미지</option>
+        <option>욕설 포함</option>
+        <option>개인정보 노출</option>
+        <option>기타</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">추가 메모 (선택)</label>
+      <input class="form-input" type="text" placeholder="유저에게 전달할 메모">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('profileRejectModal')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('profileRejectModal');showToast('프로필이 반려되었습니다')">반려 처리</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── REPORT DETAIL MODAL ── -->
+<div class="modal-overlay" id="reportDetailModal">
+  <div class="modal" style="max-height:90vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">신고 상세 — 채팅내역</div>
+    <div class="modal-info" style="margin-bottom:12px;">
+      <div class="mi-row"><span>신고자</span><b>@rabbit_cutie</b></div>
+      <div class="mi-row"><span>피신고자</span><b>@foxfox</b></div>
+      <div class="mi-row"><span>신고 시각</span><b>2025.05.10 14:32</b></div>
+      <div class="mi-row"><span>사유</span><b>욕설 및 위협</b></div>
+    </div>
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:800;color:var(--text-light);margin-bottom:8px;">💬 채팅 맥락 (열람 기록됨)</div>
+      <div style="font-size:12px;font-weight:700;line-height:1.7;">
+        <div style="margin-bottom:4px;"><b style="color:var(--primary)">rabbit_cutie:</b> 왜 그렇게 말하는 거야?</div>
+        <div style="margin-bottom:4px;"><b style="color:var(--danger)">foxfox:</b> [신고된 메시지 — 욕설 포함]</div>
+        <div><b style="color:var(--primary)">rabbit_cutie:</b> 너무하다...</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text-light);font-weight:700;margin-bottom:12px;">* 채팅 열람 내역이 audit_log에 기록되었습니다</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('reportDetailModal');showToast('콘텐츠가 숨김 처리되었습니다')">🙈 숨김 처리</button>
+      <button class="btn btn-warning" onclick="closeModal('reportDetailModal');showToast('⚠️ 경고가 발송되었습니다')">⚠️ 경고</button>
+      <button class="btn btn-danger" onclick="closeModal('reportDetailModal');openModal('suspendModal')">⏸ 일시정지</button>
+      <button class="btn btn-outline" onclick="closeModal('reportDetailModal');showToast('신고가 기각되었습니다')">❌ 기각</button>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;padding:12px;" onclick="closeModal('reportDetailModal')">닫기</button>
+  </div>
+</div>
+
+<!-- ── REFUND CONFIRM 1 (소액) ── -->
+<div class="modal-overlay" id="refundConfirm1">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator" id="refundStepInd">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">환불 승인 — 1단계</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>유저</span><b>@rabbit_cutie</b></div>
+      <div class="mi-row"><span>금액</span><b id="refundAmount1">150,000원</b></div>
+      <div class="mi-row"><span>항목</span><b>프리미엄 구독 3개월</b></div>
+      <div class="mi-row"><span>사유</span><b>서비스 불만족</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('refundConfirm1')">취소</button>
+      <button class="btn btn-danger" id="refundNextBtn" onclick="nextRefundStep()">다음</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── REFUND CONFIRM 2 (고액) ── -->
+<div class="modal-overlay" id="refundConfirm2">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot done"></div>
+      <div class="step-dot active"></div>
+    </div>
+    <div class="modal-title">고액 환불 — 최종 확인</div>
+    <div class="modal-warning">⚠️ 고액 환불입니다.<br>이 환불은 audit_log에 기록되며,<br>재무 정산 시 별도 검증 대상이 됩니다.</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>금액</span><b>150,000원</b></div>
+      <div class="mi-row"><span>항목</span><b>프리미엄 구독 3개월</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('refundConfirm2')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('refundConfirm2');showToast('💰 환불이 확정되었습니다')">환불 확정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── REFUND REJECT ── -->
+<div class="modal-overlay" id="refundRejectModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">환불 거부</div>
+    <div class="form-group">
+      <label class="form-label">거부 사유</label>
+      <select class="form-select">
+        <option>7일 초과</option>
+        <option>기능 사용됨</option>
+        <option>정책 위반</option>
+        <option>기타</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('refundRejectModal')">취소</button>
+      <button class="btn btn-danger" onclick="closeModal('refundRejectModal');showToast('환불이 거부되었습니다')">거부 확정</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ── REJECT APPLY (반려 사유 입력) ── -->
+<div class="modal-overlay" id="rejectApplyModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">신청 반려</div>
+    <div class="modal-subtitle" id="rejectApplySubtitle">선택지 A vs 선택지 B</div>
+    <div class="form-group">
+      <label class="form-label">반려 사유 <span style="color:var(--text-light);font-weight:700;">(선택)</span></label>
+      <textarea class="form-textarea" id="rejectApplyMemo" maxlength="255" placeholder="신청자에게 전달할 사유를 입력하세요" style="min-height:90px;"></textarea>
+      <div class="form-hint">255자 이내 · 입력하지 않아도 반려 가능합니다</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('rejectApplyModal')">취소</button>
+      <button class="btn btn-danger" onclick="confirmRejectApply()">반려 확정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTICE WRITE MODAL ── -->
+<div class="modal-overlay" id="noticeWriteModal">
+  <div class="modal" style="max-height:90vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">공지사항 작성</div>
+    <div class="form-group">
+      <label class="form-label">제목</label>
+      <input class="form-input" type="text" placeholder="공지 제목" id="noticeTitle">
+    </div>
+    <div class="form-group">
+      <label class="form-label">내용</label>
+      <textarea class="form-textarea" placeholder="공지 내용을 입력하세요" id="noticeContent"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">발송 방식</label>
+      <select class="form-select" id="noticeSendType" onchange="toggleSchedule(this)">
+        <option value="immediate">즉시 발송</option>
+        <option value="scheduled">예약 발송</option>
+      </select>
+    </div>
+    <div class="form-group" id="scheduleGroup" style="display:none;">
+      <label class="form-label">예약 일시</label>
+      <input class="form-input" type="datetime-local">
+    </div>
+    <div style="background:var(--primary-bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:16px;font-size:12px;font-weight:700;color:var(--primary);">
+      📢 예상 수신자: 45,230명
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('noticeWriteModal')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('noticeWriteModal');openModal('noticeConfirm1')">다음</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTICE CONFIRM 1 ── -->
+<div class="modal-overlay" id="noticeConfirm1">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+    </div>
+    <div class="modal-title">공지 발송 확인 — 1단계</div>
+    <div class="modal-info">
+      <div class="mi-row"><span>대상</span><b>45,230명</b></div>
+      <div class="mi-row"><span>제목</span><b>서버 점검 안내</b></div>
+      <div class="mi-row"><span>발송</span><b>즉시 발송</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('noticeConfirm1')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('noticeConfirm1');openModal('noticeConfirm2')">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTICE CONFIRM 2 (대량 발송) ── -->
+<div class="modal-overlay" id="noticeConfirm2">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="step-indicator">
+      <div class="step-dot done"></div>
+      <div class="step-dot active"></div>
+    </div>
+    <div class="modal-title">대량 발송 — 최종 확인</div>
+    <div class="modal-warning">⚠️ 대량 발송 최종 확인<br>발송 후에는 수정이 불가합니다.<br>45,230명에게 발송됩니다.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('noticeConfirm2')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('noticeConfirm2');showToast('📢 공지가 발송되었습니다')">발송 확정</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast" style="
+  position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+  background:var(--text);color:#fff;
+  padding:10px 20px;border-radius:20px;
+  font-family:'Nanum Square Neo',sans-serif;font-size:13px;font-weight:700;
+  z-index:9999;display:none;white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,0.2);
+"></div>
+
+<script>
+// ─── TAB SWITCHING ───
+let currentTab = 0;
+function switchTab(idx) {
+  document.querySelectorAll('.tab-pane').forEach((p,i) => p.classList.toggle('active', i===idx));
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i===idx));
+  currentTab = idx;
+  // hide user detail bar when not on user tab
+  const bar = document.getElementById('userDetailBar');
+  if (bar) bar.style.display = (idx===1 && document.getElementById('userDetailView').classList.contains('active')) ? 'flex' : 'none';
+}
+
+// ─── USER DETAIL ───
+const userData = {
+  user1: { avatar:'🐰', name:'토끼귀엽다', id:'@rabbit_cutie · ID: 10482' },
+  user2: { avatar:'🦊', name:'여우야', id:'@foxfox · ID: 20193' },
+  user3: { avatar:'🐻', name:'곰돌이', id:'@bear_bro · ID: 30044' },
+};
+function openUserDetail(uid) {
+  const u = userData[uid];
+  document.getElementById('detailAvatar').textContent = u.avatar;
+  document.getElementById('detailName').textContent = u.name;
+  document.getElementById('detailId').textContent = u.id;
+  document.getElementById('userListView').classList.remove('active');
+  document.getElementById('userDetailView').classList.add('active');
+  document.getElementById('userDetailBar').style.display = 'flex';
+  // reset sub tabs
+  switchSubTab(0);
+}
+function closeUserDetail() {
+  document.getElementById('userListView').classList.add('active');
+  document.getElementById('userDetailView').classList.remove('active');
+  document.getElementById('userDetailBar').style.display = 'none';
+}
+
+// ─── SUB TAB SWITCHING ───
+function switchSubTab(idx) {
+  document.querySelectorAll('.sub-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.sub-pane').forEach((p,i) => p.classList.toggle('active', i===idx));
+}
+
+// ─── MODAL ───
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+});
+
+// ─── REPORT FILTER ───
+function switchReportFilter(btn, type) {
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const autoSection = document.getElementById('autoHiddenSection');
+  autoSection.style.display = type === 'pending' ? 'block' : 'none';
+}
+
+// ─── FILTER CHIP ───
+function toggleChip(chip) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+}
+
+// ─── REFUND FLOW ───
+function openRefundFlow(amount) {
+  document.getElementById('refundAmount1').textContent = amount.toLocaleString() + '원';
+  openModal('refundConfirm1');
+}
+function nextRefundStep() {
+  const amtText = document.getElementById('refundAmount1').textContent;
+  const amount = parseInt(amtText.replace(/[^0-9]/g, ''));
+  closeModal('refundConfirm1');
+  if (amount >= 100000) {
+    openModal('refundConfirm2');
+  } else {
+    showToast('💰 환불이 확정되었습니다');
+  }
+}
+
+// ─── NOTICE SCHEDULE TOGGLE ───
+function toggleSchedule(sel) {
+  document.getElementById('scheduleGroup').style.display = sel.value === 'scheduled' ? 'block' : 'none';
+}
+
+// ─── USER SEARCH ───
+function searchUsers() {
+  const q = document.getElementById('userSearchInput').value.toLowerCase();
+  const cards = document.querySelectorAll('#userListContainer .user-card');
+  cards.forEach(c => {
+    const text = c.textContent.toLowerCase();
+    c.style.display = q === '' || text.includes(q) ? '' : 'none';
+  });
+}
+document.getElementById('userSearchInput').addEventListener('keyup', function(e) {
+  if (e.key === 'Enter') searchUsers();
+});
+
+// ─── TOAST ───
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2500);
+}
+
+// ─── PUSH NOTIFICATION SIMULATION ───
+setTimeout(() => {
+  const notif = document.getElementById('pushNotif');
+  notif.classList.add('show');
+  setTimeout(() => notif.classList.remove('show'), 4000);
+}, 3000);
+
+
+
+// ─── BAL APPLY (신청 큐) ───
+let balApplies = [
+  { id:1, user_id:10482, user_handle:'@user123', option_a:'피자', option_b:'치킨', category_id:'1', status:'PENDING', admin_memo:null, create_time_rel:'1시간 전' },
+  { id:2, user_id:20193, user_handle:'@newuser', option_a:'여름', option_b:'겨울', category_id:'2', status:'PENDING', admin_memo:null, create_time_rel:'3시간 전' },
+  { id:3, user_id:30044, user_handle:'@bear_bro', option_a:'커피', option_b:'녹차', category_id:'1', status:'PENDING', admin_memo:null, create_time_rel:'어제' },
+  { id:4, user_id:40011, user_handle:'@starmilk', option_a:'아침형', option_b:'저녁형', category_id:'2', status:'APPROVED', admin_memo:null, create_time_rel:'2일 전' },
+  { id:5, user_id:50023, user_handle:'@pine_tree', option_a:'스포츠카', option_b:'SUV', category_id:'3', status:'REJECTED', admin_memo:'내용이 너무 추상적입니다', create_time_rel:'3일 전' },
+  { id:6, user_id:60099, user_handle:'@cloud22', option_a:'여행', option_b:'독서', category_id:'3', status:'APPROVED', admin_memo:null, create_time_rel:'4일 전' },
+];
+
+let currentApplyFilter = 'PENDING';
+let rejectingApplyId = null;
+
+const APPLY_STATUS_TAG = { PENDING:'tag-pending', APPROVED:'tag-published', REJECTED:'tag-hidden' };
+const APPLY_STATUS_LABEL = { PENDING:'승인 대기', APPROVED:'승인 완료', REJECTED:'승인 반려' };
+
+function renderApplyList(filter) {
+  var list = document.getElementById('applyList');
+  var items = filter === 'ALL' ? balApplies : balApplies.filter(function(a){ return a.status === filter; });
+
+  // update pending badge
+  var pendingCount = balApplies.filter(function(a){ return a.status === 'PENDING'; }).length;
+  var badge = document.getElementById('pendingBadge');
+  if (badge) {
+    badge.textContent = pendingCount;
+    badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state"><div class="es-icon">📭</div><div class="es-text">해당 상태의 신청이 없습니다</div></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var a = items[i];
+    var catLabel = getCategoryLabel(a.category_id);
+    var tagCls = APPLY_STATUS_TAG[a.status] || 'tag-pending';
+    var statusLabel = APPLY_STATUS_LABEL[a.status] || a.status;
+    var memoHtml = a.admin_memo ? '<div class="apply-memo">💬 ' + a.admin_memo + '</div>' : '';
+
+    html += '<div class="content-card">';
+    html += '  <div class="content-header">';
+    html += '    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">';
+    html += '      <span class="published-tag ' + tagCls + '">' + statusLabel + '</span>';
+    html += '      <span style="font-size:10px;color:var(--text-light);font-weight:700;white-space:nowrap;">' + catLabel + '</span>';
+    html += '    </div>';
+    html += '    <span style="font-size:11px;color:var(--text-light);font-weight:700;">' + a.user_handle + ' · ' + a.create_time_rel + '</span>';
+    html += '  </div>';
+    html += '  <div class="content-q">' + a.option_a + ' vs ' + a.option_b + '</div>';
+    html += '  <div class="content-options">';
+    html += '    <div class="option-pill">🅰 ' + a.option_a + '</div>';
+    html += '    <div class="option-pill">🅱 ' + a.option_b + '</div>';
+    html += '  </div>';
+    html += memoHtml;
+
+    if (a.status === 'PENDING') {
+      html += '  <div class="content-actions">';
+      html += '    <button class="btn btn-success" onclick="approveApply(' + a.id + ')">승인</button>';
+      html += '    <button class="btn btn-danger" onclick="openRejectApplyModal(' + a.id + ')">반려</button>';
+      html += '  </div>';
+    }
+    html += '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function filterApply(chip, status) {
+  document.querySelectorAll('#applyFilterRow .filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  chip.classList.add('active');
+  currentApplyFilter = status;
+  renderApplyList(status);
+}
+
+function approveApply(id) {
+  for (var i = 0; i < balApplies.length; i++) {
+    if (balApplies[i].id === id) {
+      balApplies[i].status = 'APPROVED';
+      balApplies[i].admin_memo = null;
+
+      // bal_apply 승인 시 bal_game에 이관 (테이블 주석 참조)
+      var a = balApplies[i];
+      var newGame = {
+        id: balGames.length + 1,
+        uuid: 'uuid-from-apply-' + a.id,
+        desc_a: '', option_a: a.option_a,
+        desc_b: '', option_b: a.option_b,
+        description: '',
+        category_id: a.category_id,
+        status: 'DRAFT',
+        scheduled_at: null,
+        a_count: 0, b_count: 0, comment_count: 0,
+        applicant_id: a.user_id,
+        version: 0,
+        create_time: new Date().getFullYear() + '.' + String(new Date().getMonth()+1).padStart(2,'0') + '.' + String(new Date().getDate()).padStart(2,'0'),
+        update_time: new Date().getFullYear() + '.' + String(new Date().getMonth()+1).padStart(2,'0') + '.' + String(new Date().getDate()).padStart(2,'0')
+      };
+      balGames.unshift(newGame);
+      renderBalGameList(currentFilterStatus);
+      break;
+    }
+  }
+  renderApplyList(currentApplyFilter);
+  showToast('✓ 승인되었습니다 (DRAFT로 이관)');
+}
+
+function openRejectApplyModal(id) {
+  rejectingApplyId = id;
+  var memoInput = document.getElementById('rejectApplyMemo');
+  if (memoInput) memoInput.value = '';
+  var a = null;
+  for (var i = 0; i < balApplies.length; i++) { if (balApplies[i].id === id) { a = balApplies[i]; break; } }
+  var subtitle = document.getElementById('rejectApplySubtitle');
+  if (subtitle && a) subtitle.textContent = a.option_a + ' vs ' + a.option_b;
+  openModal('rejectApplyModal');
+}
+
+function confirmRejectApply() {
+  if (!rejectingApplyId) return;
+  var memo = document.getElementById('rejectApplyMemo').value.trim();
+  for (var i = 0; i < balApplies.length; i++) {
+    if (balApplies[i].id === rejectingApplyId) {
+      balApplies[i].status = 'REJECTED';
+      balApplies[i].admin_memo = memo || null;
+      break;
+    }
+  }
+  rejectingApplyId = null;
+  closeModal('rejectApplyModal');
+  renderApplyList(currentApplyFilter);
+  showToast('반려되었습니다');
+}
+
+// ─── BAL GAME DATA ───
+const CATEGORIES = {
+  '1': { name: '음식·맛집', emoji: '🍽️' },
+  '2': { name: '일상·공감', emoji: '💭' },
+  '3': { name: '여행·라이프', emoji: '✈️' },
+  '4': { name: '게임·취미', emoji: '🎮' },
+  '5': { name: '직장·커리어', emoji: '💼' },
+  '6': { name: '연애·관계', emoji: '💕' },
+  '7': { name: '사회·이슈', emoji: '🌍' },
+  '8': { name: '영화·드라마', emoji: '🎬' },
+};
+
+let balGames = [
+  { id:1, uuid:'uuid-001', desc_a:'점심시간 회사 앞에서', option_a:'짜장면', desc_b:'점심시간 회사 앞에서', option_b:'짬뽕', description:'오늘 점심 고민된다면?', category_id:'1', status:'PUBLISHED', scheduled_at:null, a_count:1842, b_count:2310, comment_count:94, applicant_id:null, version:3, create_time:'2025.05.10', update_time:'2025.05.10' },
+  { id:2, uuid:'uuid-002', desc_a:'여름 휴가 계획할 때', option_a:'산', desc_b:'여름 휴가 계획할 때', option_b:'바다', description:'여름 휴가 어디로?', category_id:'3', status:'SCHEDULED', scheduled_at:'2025-05-15T15:00', a_count:0, b_count:0, comment_count:0, applicant_id:null, version:0, create_time:'2025.05.09', update_time:'2025.05.09' },
+  { id:3, uuid:'uuid-003', desc_a:'주말 오후', option_a:'게임', desc_b:'주말 오후', option_b:'운동', description:'', category_id:'4', status:'HIDDEN', scheduled_at:null, a_count:502, b_count:388, comment_count:21, applicant_id:10482, version:2, create_time:'2025.05.02', update_time:'2025.05.08' },
+  { id:4, uuid:'uuid-004', desc_a:'인생 마지막 한 끼라면', option_a:'치킨', desc_b:'인생 마지막 한 끼라면', option_b:'피자', description:'인생 마지막 한 끼라면?', category_id:'1', status:'DRAFT', scheduled_at:null, a_count:0, b_count:0, comment_count:0, applicant_id:20193, version:0, create_time:'2025.05.01', update_time:'2025.05.01' },
+  { id:5, uuid:'uuid-005', desc_a:'평생 한 종만 키운다면', option_a:'강아지', desc_b:'평생 한 종만 키운다면', option_b:'고양이', description:'반려동물 선택한다면?', category_id:'2', status:'ARCHIVED', scheduled_at:null, a_count:3201, b_count:2899, comment_count:187, applicant_id:null, version:7, create_time:'2025.03.01', update_time:'2025.04.30' },
+];
+
+let currentFilterStatus = 'ALL';
+let editingGameId = null;
+
+const STATUS_CLASS = { DRAFT:'tag-draft', SCHEDULED:'tag-scheduled', PUBLISHED:'tag-published', HIDDEN:'tag-hidden', ARCHIVED:'tag-archived' };
+
+const STATUS_WARNINGS = {
+  // → ARCHIVED (되돌리기 어려움)
+  'DRAFT_ARCHIVED': '⚠️ ARCHIVED는 되돌리기 어렵습니다. 신중히 선택하세요.',
+  'SCHEDULED_ARCHIVED': '⚠️ ARCHIVED는 되돌리기 어렵습니다. 예약도 함께 취소됩니다.',
+  'PUBLISHED_ARCHIVED': '⚠️ ARCHIVED는 되돌리기 어렵습니다. 신중히 선택하세요.',
+  'HIDDEN_ARCHIVED': '⚠️ ARCHIVED는 되돌리기 어렵습니다. 신중히 선택하세요.',
+  // → HIDDEN
+  'PUBLISHED_HIDDEN': '⚠️ HIDDEN으로 변경하면 앱에서 즉시 숨김 처리됩니다.',
+  'SCHEDULED_HIDDEN': '⚠️ HIDDEN으로 변경하면 예약이 취소되고 즉시 숨김 처리됩니다.',
+  // → PUBLISHED (공개 전환)
+  'DRAFT_PUBLISHED': '✅ 즉시 앱에 공개됩니다. 내용을 다시 한번 확인하세요.',
+  'HIDDEN_PUBLISHED': '✅ 콘텐츠가 앱에 다시 공개됩니다.',
+  'ARCHIVED_PUBLISHED': '⚠️ ARCHIVED에서 PUBLISHED로 복구합니다. 앱에 즉시 노출됩니다.',
+  'SCHEDULED_PUBLISHED': '✅ 예약을 취소하고 즉시 공개합니다.',
+  // → SCHEDULED
+  'DRAFT_SCHEDULED': 'ℹ️ 지정한 시각에 자동 게시됩니다. 예약 시각을 꼭 확인하세요.',
+  'PUBLISHED_SCHEDULED': '⚠️ 공개된 콘텐츠를 다시 예약으로 되돌립니다. 앱에서 숨겨집니다.',
+  'HIDDEN_SCHEDULED': 'ℹ️ 숨김 상태에서 예약으로 변경합니다. 지정 시각에 게시됩니다.',
+  // → DRAFT
+  'SCHEDULED_DRAFT': 'ℹ️ 예약이 취소되고 DRAFT로 되돌아갑니다.',
+  'PUBLISHED_DRAFT': '⚠️ 공개된 콘텐츠를 DRAFT로 되돌립니다. 앱에서 숨겨집니다.',
+  'HIDDEN_DRAFT': 'ℹ️ HIDDEN에서 DRAFT로 변경합니다.',
+};
+
+function getCategoryLabel(cat_id) {
+  var c = CATEGORIES[cat_id];
+  return c ? (c.emoji + ' ' + c.name) : '카테고리 없음';
+}
+
+function renderBalGameList(filter) {
+  var list = document.getElementById('balGameList');
+  var games = filter === 'ALL' ? balGames : balGames.filter(function(g){ return g.status === filter; });
+  if (!games.length) {
+    list.innerHTML = '<div class="empty-state"><div class="es-icon">🎮</div><div class="es-text">해당 상태의 게임이 없습니다</div></div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < games.length; i++) {
+    var g = games[i];
+    var total = g.a_count + g.b_count;
+    var aRate = total ? Math.round(g.a_count / total * 100) : 50;
+    var bRate = 100 - aRate;
+    var schedInfo = (g.status === 'SCHEDULED' && g.scheduled_at) ? ' · 예약: ' + g.scheduled_at.replace('T', ' ') : '';
+    var catLabel = getCategoryLabel(g.category_id);
+    var descHtml = g.description ? '<div style="font-size:11px;color:var(--text-light);font-weight:700;margin-bottom:6px;line-height:1.4;">' + g.description + '</div>' : '';
+    var applicantHtml = g.applicant_id ? '<span>👤 신청자 #' + g.applicant_id + '</span>' : '';
+    var statusCls = STATUS_CLASS[g.status] || '';
+    var descAHtml = g.desc_a ? '<div class="bglist-subdesc">' + g.desc_a + '</div>' : '';
+    var descBHtml = g.desc_b ? '<div class="bglist-subdesc">' + g.desc_b + '</div>' : '';
+    html += '<div class="bglist-card fade-in">';
+    html += '  <div class="bglist-header">';
+    html += '    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">';
+    html += '      <span class="published-tag ' + statusCls + '">' + g.status + '</span>';
+    html += '      <span style="font-size:10px;color:var(--text-light);font-weight:700;white-space:nowrap;">' + catLabel + '</span>';
+    html += '    </div>';
+    html += '    <button class="bglist-edit-btn" onclick="openBalGameEdit(' + g.id + ')">✏️ 수정</button>';
+    html += '  </div>';
+    html += '  <div class="bglist-q">' + g.option_a + ' vs ' + g.option_b + '</div>';
+    html += descHtml;
+    html += '  <div class="bglist-options">';
+    html += '    <div class="bglist-option">' + descAHtml + '<div class="bglist-option-main">' + g.option_a + '</div><div class="bglist-option-count">' + g.a_count.toLocaleString() + '표 (' + aRate + '%)</div></div>';
+    html += '    <div class="bglist-option">' + descBHtml + '<div class="bglist-option-main">' + g.option_b + '</div><div class="bglist-option-count">' + g.b_count.toLocaleString() + '표 (' + bRate + '%)</div></div>';
+    html += '  </div>';
+    html += '  <div class="bglist-meta">';
+    html += '    <span>💬 ' + g.comment_count + '</span>';
+    html += '    <span>📅 ' + g.create_time + schedInfo + '</span>';
+    html += '    <span>🔢 v' + g.version + '</span>';
+    html += applicantHtml;
+    html += '  </div>';
+    html += '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function filterBalGame(chip, status) {
+  document.querySelectorAll('#balGameFilterRow .filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  chip.classList.add('active');
+  currentFilterStatus = status;
+  renderBalGameList(status);
+}
+
+function switchContentView(viewId) {
+  ['contentListView','contentCreateView','contentEditView'].forEach(function(id){
+    document.getElementById(id).classList.remove('active');
+  });
+  document.getElementById(viewId).classList.add('active');
+  document.querySelector('.content').scrollTop = 0;
+}
+
+// ─── CREATE ───
+function openBalGameCreate() {
+  document.getElementById('cf_descA').value = '';
+  document.getElementById('cf_optionA').value = '';
+  document.getElementById('cf_descB').value = '';
+  document.getElementById('cf_optionB').value = '';
+  document.getElementById('cf_description').value = '';
+  document.getElementById('cf_category').value = '';
+  document.getElementById('cf_descALen').textContent = '0';
+  document.getElementById('cf_aLen').textContent = '0';
+  document.getElementById('cf_descBLen').textContent = '0';
+  document.getElementById('cf_bLen').textContent = '0';
+  document.getElementById('cf_descLen').textContent = '0';
+  document.getElementById('cf_scheduledAt').value = '';
+  document.getElementById('cf_scheduleGroup').style.display = 'none';
+  resetScheduledConfirm('cf');
+  document.querySelectorAll('[name="cf_status"]').forEach(function(r){ r.checked = (r.value === 'DRAFT'); });
+  document.querySelectorAll('#contentCreateView .status-radio').forEach(function(l){
+    l.classList.toggle('active', l.querySelector('input').value === 'DRAFT');
+  });
+  updatePreview();
+  switchContentView('contentCreateView');
+}
+
+function updatePreview() {
+  var descA = document.getElementById('cf_descA').value;
+  var a = document.getElementById('cf_optionA').value || '선택지 A';
+  var descB = document.getElementById('cf_descB').value;
+  var b = document.getElementById('cf_optionB').value || '선택지 B';
+  var catId = document.getElementById('cf_category').value;
+  var catLabel = catId ? getCategoryLabel(catId) : '카테고리';
+  document.getElementById('previewDescA').textContent = descA;
+  document.getElementById('previewOptionA').textContent = a;
+  document.getElementById('previewDescB').textContent = descB;
+  document.getElementById('previewOptionB').textContent = b;
+  document.getElementById('previewCategory').textContent = catLabel;
+  document.getElementById('cf_descALen').textContent = document.getElementById('cf_descA').value.length;
+  document.getElementById('cf_aLen').textContent = document.getElementById('cf_optionA').value.length;
+  document.getElementById('cf_descBLen').textContent = document.getElementById('cf_descB').value.length;
+  document.getElementById('cf_bLen').textContent = document.getElementById('cf_optionB').value.length;
+}
+
+function onStatusChange(radio) {
+  document.querySelectorAll('#contentCreateView .status-radio').forEach(function(l){
+    l.classList.toggle('active', l.querySelector('input').value === radio.value);
+  });
+  document.getElementById('cf_scheduleGroup').style.display = (radio.value === 'SCHEDULED') ? 'block' : 'none';
+  if (radio.value !== 'SCHEDULED') resetScheduledConfirm('cf');
+}
+
+// ─── EDIT ───
+function openBalGameEdit(id) {
+  var g = null;
+  for (var i = 0; i < balGames.length; i++) { if (balGames[i].id === id) { g = balGames[i]; break; } }
+  if (!g) return;
+  editingGameId = id;
+
+  document.getElementById('editMetaBar').innerHTML =
+    '<span>ID: <b>' + g.id + '</b></span>' +
+    '<span>UUID: <b style="font-family:monospace;font-size:10px;">' + g.uuid + '</b></span>' +
+    '<span>생성: <b>' + g.create_time + '</b></span>' +
+    '<span>수정: <b>' + g.update_time + '</b></span>';
+
+  document.getElementById('ef_descA').value = g.desc_a || '';
+  document.getElementById('ef_optionA').value = g.option_a;
+  document.getElementById('ef_descB').value = g.desc_b || '';
+  document.getElementById('ef_optionB').value = g.option_b;
+  document.getElementById('ef_description').value = g.description || '';
+  document.getElementById('ef_category').value = g.category_id;
+  document.getElementById('ef_descALen').textContent = (g.desc_a || '').length;
+  document.getElementById('ef_aLen').textContent = g.option_a.length;
+  document.getElementById('ef_descBLen').textContent = (g.desc_b || '').length;
+  document.getElementById('ef_bLen').textContent = g.option_b.length;
+  document.getElementById('ef_descLen').textContent = (g.description || '').length;
+
+  document.querySelectorAll('[name="ef_status"]').forEach(function(r){ r.checked = (r.value === g.status); });
+  document.querySelectorAll('#contentEditView .status-radio').forEach(function(l){
+    l.classList.toggle('active', l.querySelector('input').value === g.status);
+  });
+  document.getElementById('editStatusWarn').style.display = 'none';
+
+  document.getElementById('ef_scheduleGroup').style.display = (g.status === 'SCHEDULED') ? 'block' : 'none';
+  document.getElementById('ef_scheduledAt').value = g.scheduled_at || '';
+  resetScheduledConfirm('ef');
+  if (g.status === 'SCHEDULED' && g.scheduled_at) { markScheduledConfirmed('ef'); }
+
+  if (g.applicant_id) {
+    document.getElementById('ef_applicantGroup').style.display = 'block';
+    document.getElementById('ef_applicant').textContent = '유저 #' + g.applicant_id + '  (bal_apply 승인 이관)';
+  } else {
+    document.getElementById('ef_applicantGroup').style.display = 'none';
+  }
+
+  var total = g.a_count + g.b_count;
+  var aRate = total ? Math.round(g.a_count / total * 100) : 50;
+  var bRate = 100 - aRate;
+  document.getElementById('editStatA').textContent = '🅰 ' + g.option_a;
+  document.getElementById('editStatB').textContent = '🅱 ' + g.option_b;
+  document.getElementById('editStatACount').textContent = g.a_count.toLocaleString() + '표 (' + aRate + '%)';
+  document.getElementById('editStatBCount').textContent = g.b_count.toLocaleString() + '표 (' + bRate + '%)';
+  document.getElementById('editVoteBarA').style.width = aRate + '%';
+  document.getElementById('editVoteBarB').style.width = bRate + '%';
+  document.getElementById('editCommentCount').textContent = g.comment_count;
+  document.getElementById('editVersion').textContent = g.version;
+
+  updateEditPreview();
+  switchContentView('contentEditView');
+}
+
+function updateEditPreview() {
+  var descA = document.getElementById('ef_descA').value;
+  var a = document.getElementById('ef_optionA').value || '선택지 A';
+  var descB = document.getElementById('ef_descB').value;
+  var b = document.getElementById('ef_optionB').value || '선택지 B';
+  var catId = document.getElementById('ef_category').value;
+  var catLabel = catId ? getCategoryLabel(catId) : '카테고리';
+  document.getElementById('editPreviewDescA').textContent = descA;
+  document.getElementById('editPreviewOptionA').textContent = a;
+  document.getElementById('editPreviewDescB').textContent = descB;
+  document.getElementById('editPreviewOptionB').textContent = b;
+  document.getElementById('editPreviewCategory').textContent = catLabel;
+  document.getElementById('ef_descALen').textContent = document.getElementById('ef_descA').value.length;
+  document.getElementById('ef_aLen').textContent = document.getElementById('ef_optionA').value.length;
+  document.getElementById('ef_descBLen').textContent = document.getElementById('ef_descB').value.length;
+  document.getElementById('ef_bLen').textContent = document.getElementById('ef_optionB').value.length;
+}
+
+function onEditStatusChange(radio) {
+  var newStatus = radio.value;
+  var game = null;
+  for (var i = 0; i < balGames.length; i++) { if (balGames[i].id === editingGameId) { game = balGames[i]; break; } }
+  var oldStatus = game ? game.status : '';
+
+  document.querySelectorAll('#contentEditView .status-radio').forEach(function(l){
+    l.classList.toggle('active', l.querySelector('input').value === newStatus);
+  });
+  document.getElementById('ef_scheduleGroup').style.display = (newStatus === 'SCHEDULED') ? 'block' : 'none';
+  if (newStatus !== 'SCHEDULED') resetScheduledConfirm('ef');
+
+  var warnKey = oldStatus + '_' + newStatus;
+  var warnEl = document.getElementById('editStatusWarn');
+  if (STATUS_WARNINGS[warnKey] && oldStatus !== newStatus) {
+    warnEl.style.display = 'block';
+    warnEl.textContent = STATUS_WARNINGS[warnKey];
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+function closeBalGameForm() {
+  switchContentView('contentListView');
+  editingGameId = null;
+}
+
+function submitBalGame(mode) {
+  var today = new Date();
+  var todayStr = today.getFullYear() + '.' +
+    String(today.getMonth()+1).padStart(2,'0') + '.' +
+    String(today.getDate()).padStart(2,'0');
+
+  if (mode === 'create') {
+    var descA = document.getElementById('cf_descA').value.trim();
+    var a = document.getElementById('cf_optionA').value.trim();
+    var descB = document.getElementById('cf_descB').value.trim();
+    var b = document.getElementById('cf_optionB').value.trim();
+    var cat = document.getElementById('cf_category').value;
+    if (!a || !b || !cat) { showToast('⚠️ A/B 선택지와 카테고리는 필수입니다'); return; }
+    var statusEl = document.querySelector('[name="cf_status"]:checked');
+    var status = statusEl ? statusEl.value : 'DRAFT';
+    var scheduledAt = (status === 'SCHEDULED') ? document.getElementById('cf_scheduledAt').value : null;
+    if (status === 'SCHEDULED' && !scheduledAt) { showToast('⚠️ 예약 게시 시각을 입력하세요'); return; }
+    if (status === 'SCHEDULED' && !scheduledConfirmed['cf']) { showToast('⚠️ 예약 시각 확인 버튼을 눌러주세요'); return; }
+    var newGame = {
+      id: balGames.length + 1,
+      uuid: 'uuid-new-' + Date.now(),
+      desc_a: descA, option_a: a,
+      desc_b: descB, option_b: b,
+      description: document.getElementById('cf_description').value.trim(),
+      category_id: cat, status: status, scheduled_at: scheduledAt,
+      a_count: 0, b_count: 0, comment_count: 0,
+      applicant_id: null, version: 0,
+      create_time: todayStr, update_time: todayStr
+    };
+    balGames.unshift(newGame);
+    closeBalGameForm();
+    renderBalGameList(currentFilterStatus);
+    showToast('✅ 새 밸런스게임이 저장되었습니다');
+
+  } else {
+    var edescA = document.getElementById('ef_descA').value.trim();
+    var ea = document.getElementById('ef_optionA').value.trim();
+    var edescB = document.getElementById('ef_descB').value.trim();
+    var eb = document.getElementById('ef_optionB').value.trim();
+    var ecat = document.getElementById('ef_category').value;
+    if (!ea || !eb || !ecat) { showToast('⚠️ A/B 선택지와 카테고리는 필수입니다'); return; }
+    var eStatusEl = document.querySelector('[name="ef_status"]:checked');
+    var eStatus = eStatusEl ? eStatusEl.value : 'DRAFT';
+    var eScheduledAt = (eStatus === 'SCHEDULED') ? document.getElementById('ef_scheduledAt').value : null;
+    if (eStatus === 'SCHEDULED' && !eScheduledAt) { showToast('⚠️ 예약 게시 시각을 입력하세요'); return; }
+    if (eStatus === 'SCHEDULED' && !scheduledConfirmed['ef']) { showToast('⚠️ 예약 시각 확인 버튼을 눌러주세요'); return; }
+    for (var i = 0; i < balGames.length; i++) {
+      if (balGames[i].id === editingGameId) {
+        balGames[i].desc_a = edescA;
+        balGames[i].option_a = ea;
+        balGames[i].desc_b = edescB;
+        balGames[i].option_b = eb;
+        balGames[i].description = document.getElementById('ef_description').value.trim();
+        balGames[i].category_id = ecat;
+        balGames[i].status = eStatus;
+        balGames[i].scheduled_at = eScheduledAt;
+        balGames[i].version = balGames[i].version + 1;
+        balGames[i].update_time = todayStr;
+        document.getElementById('editStatA').textContent = '🅰 ' + ea;
+        document.getElementById('editStatB').textContent = '🅱 ' + eb;
+        break;
+      }
+    }
+    closeBalGameForm();
+    renderBalGameList(currentFilterStatus);
+    showToast('✅ 변경사항이 저장되었습니다');
+  }
+}
+
+
+// ─── SCHEDULED AT CONFIRMATION ───
+var scheduledConfirmed = { 'cf': false, 'ef': false };
+
+function confirmScheduledAt(prefix) {
+  var inputEl = document.getElementById(prefix + '_scheduledAt');
+  var val = inputEl.value;
+  if (!val) { showToast('⚠️ 먼저 일시를 선택해주세요'); return; }
+  var picked = new Date(val);
+  var now = new Date();
+  if (picked <= now) { showToast('⚠️ 미래 시각을 선택해주세요'); return; }
+  markScheduledConfirmed(prefix);
+  showToast('✓ 예약 시각이 확인되었습니다');
+}
+
+function markScheduledConfirmed(prefix) {
+  scheduledConfirmed[prefix] = true;
+  var btn = document.getElementById(prefix + '_scheduledConfirmBtn');
+  var label = document.getElementById(prefix + '_scheduledConfirmedLabel');
+  if (btn) { btn.classList.add('confirmed'); btn.textContent = '✓ 확인됨'; }
+  if (label) { label.classList.add('visible'); }
+}
+
+function resetScheduledConfirm(prefix) {
+  scheduledConfirmed[prefix] = false;
+  var btn = document.getElementById(prefix + '_scheduledConfirmBtn');
+  var label = document.getElementById(prefix + '_scheduledConfirmedLabel');
+  if (btn) { btn.classList.remove('confirmed'); btn.textContent = '확인'; }
+  if (label) { label.classList.remove('visible'); }
+}
+
+// Reset confirmed state when user changes the datetime
+document.addEventListener('DOMContentLoaded', function(){
+  ['cf','ef'].forEach(function(p){
+    var inp = document.getElementById(p + '_scheduledAt');
+    if (inp) inp.addEventListener('change', function(){ resetScheduledConfirm(p); });
+  });
+});
+
+// Init
+renderBalGameList('ALL');
+renderApplyList('PENDING');
+
+// Initialize
+document.getElementById('userDetailBar').style.display = 'none';
+
+</script>
+</body>
+</html>
