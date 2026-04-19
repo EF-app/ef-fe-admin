@@ -9,14 +9,18 @@
   ],
   "main": "index.js",
   "scripts": {
-    "dev:web":    "npm run dev --workspace=apps/web",
+    "dev:web": "npm run dev --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile",
-    "build:web":  "npm run build --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
     "type-check": "tsc -b",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "eslint": "^10.2.1",
+    "prettier": "^3.8.3"
+  }
 }
