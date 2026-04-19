@@ -1,0 +1,124 @@
+# --- 의존성 및 빌드 결과물 ---
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+out/
+build/
+**/build/
+**/web-build/
+**/.vite/
+
+# 네이티브 빌드 캐시
+**/.tamagui/
+**/ios/
+**/android/
+
+# ============================================================
+# TypeScript
+# ============================================================
+**/*.tsbuildinfo
+**/.tsbuildinfo
+
+
+# --- 운영체제 및 에디터 설정 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# --- Expo (Mobile) 관련 ---
+**/.expo/
+**/.expo-shared/
+**/expo-env.d.ts
+.expo/
+*.jks
+*.p8
+*.pyc
+*.keystore
+*.endpoint
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Vite (Web) 관련 ---
+# 환경 변수 
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# npm workspaces lock 외 다른 PM lock 금지 (선택)
+yarn.lock
+pnpm-lock.yaml
+
+# --- 프로젝트 관리 도구 ---
+.history/
+.eslintcache
+.stylelintcache
+
+
+
+# ============================================================
+# 테스트·커버리지
+# ============================================================
+coverage/
+**/coverage/
+*.lcov
+.nyc_output/
+
+
+# ============================================================
+# 빌드 도구 캐시
+# ============================================================
+.cache/
+.parcel-cache/
+.next/
+# --- 모노레포 관련 ---
+.turbo/
+
+# ============================================================
+# 로그
+# ============================================================
+logs/
+*.log
+!CHANGELOG.md
+
+
+# ============================================================
+# 보안 · 인증서
+# ============================================================
+*.pem
+*.key
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+firebase-service-account.json
+
+# EAS / Expo 자격증명
+credentials.json
+.expo-credentials
+
+
+# ============================================================
+# 임시 파일
+# ============================================================
+tmp/
+temp/
+*.tmp
