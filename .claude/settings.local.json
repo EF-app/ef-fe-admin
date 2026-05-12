@@ -25,7 +25,9 @@
       "PowerShell(npx tsc -b 2>&1)",
       "PowerShell(\\(Get-Content packages/shared/src/hooks/queries.ts | Measure-Object -Line\\).Lines)",
       "PowerShell(\\(Get-Content C:\\\\EF-app\\\\ef-fe-admin\\\\packages\\\\shared\\\\src\\\\hooks\\\\queries.ts | Measure-Object -Line\\).Lines)",
-      "PowerShell(\\(Get-Content C:\\\\EF-app\\\\ef-fe-admin\\\\packages\\\\shared\\\\src\\\\mocks\\\\users.ts | Measure-Object -Line\\).Lines)"
+      "PowerShell(\\(Get-Content C:\\\\EF-app\\\\ef-fe-admin\\\\packages\\\\shared\\\\src\\\\mocks\\\\users.ts | Measure-Object -Line\\).Lines)",
+      "Bash(git check-ignore *)",
+      "Bash(git rm *)"
     ]
   }
 }
