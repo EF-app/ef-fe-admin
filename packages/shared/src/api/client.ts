@@ -34,7 +34,13 @@ export function createApiClient(config: ApiClientConfig): AxiosInstance {
     (res) => res,
     (error) => {
       const status = error?.response?.status;
-      if (status === 401 && config.onUnauthorized) {
+      const url: string = error?.config?.url ?? '';
+      // 로그인·토큰갱신 엔드포인트 자체의 401 은 "현재 입력 자체가 거절된 케이스"라
+      // 세션 만료 핸들러를 돌리면 안 된다 (안 그러면 로그인 시도마다 토큰/스토리지가 잘리고
+      // 직후 대시보드에서 즉시 로그인으로 튕기는 루프가 발생).
+      const isAuthEndpoint =
+        url.includes('/auth/login') || url.includes('/auth/token/refresh');
+      if (status === 401 && !isAuthEndpoint && config.onUnauthorized) {
         config.onUnauthorized();
       }
       return Promise.reject(normalizeError(error));
@@ -54,10 +60,24 @@ export interface NormalizedError {
 export function normalizeError(error: unknown): NormalizedError {
   if (axios.isAxiosError(error)) {
     const res = error.response;
-    const data = res?.data as { message?: string; errorCode?: string } | undefined;
+    // BE 의 ErrorRspDto: { code, httpStatus, errorCode, errorMessage }
+    // 일부 응답은 { message, errorCode } 형태도 있을 수 있어 둘 다 시도.
+    const data = res?.data as
+      | { message?: string; errorMessage?: string | Record<string, string>; errorCode?: string }
+      | undefined;
+    const rawMsg = data?.errorMessage ?? data?.message;
+    // errorMessage 가 Map<field, msg> 인 BindException 케이스 — 첫 항목 또는 join 으로 평탄화
+    let message: string;
+    if (typeof rawMsg === 'string') {
+      message = rawMsg;
+    } else if (rawMsg && typeof rawMsg === 'object') {
+      message = Object.values(rawMsg).join(', ') || error.message;
+    } else {
+      message = error.message ?? '요청에 실패했습니다.';
+    }
     return {
       status: res?.status ?? 0,
-      message: data?.message ?? error.message ?? '요청에 실패했습니다.',
+      message,
       errorCode: data?.errorCode,
       raw: error,
     };

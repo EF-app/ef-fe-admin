@@ -16,7 +16,16 @@
       "Bash(node -e \"console.log\\(require.resolve\\('react'\\)\\)\")",
       "Bash(node -e \"console.log\\('react:', require.resolve\\('react'\\)\\); console.log\\('react-dom:', require.resolve\\('react-dom'\\)\\); console.log\\('react-dom/client:', require.resolve\\('react-dom/client'\\)\\);\")",
       "Bash(wait)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node *)",
+      "Bash(git mv *)",
+      "Bash(grep -iE \"^\\(shield-off|sticky-note|menu|x|scale|megaphone\\)\\\\.js$\")",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(npm run *)",
+      "PowerShell(npx tsc -b 2>&1)",
+      "PowerShell(\\(Get-Content packages/shared/src/hooks/queries.ts | Measure-Object -Line\\).Lines)",
+      "PowerShell(\\(Get-Content C:\\\\EF-app\\\\ef-fe-admin\\\\packages\\\\shared\\\\src\\\\hooks\\\\queries.ts | Measure-Object -Line\\).Lines)",
+      "PowerShell(\\(Get-Content C:\\\\EF-app\\\\ef-fe-admin\\\\packages\\\\shared\\\\src\\\\mocks\\\\users.ts | Measure-Object -Line\\).Lines)"
     ]
   }
 }

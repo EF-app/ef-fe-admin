@@ -23,6 +23,7 @@ export const REPORT_TARGET_TYPE = {
   BAL_COMMENT: 'BAL_COMMENT',
   PROFILE: 'PROFILE',
   CHAT: 'CHAT',
+  CHAT_IMAGE: 'CHAT_IMAGE',
 } as const;
 export type ReportTargetType = (typeof REPORT_TARGET_TYPE)[keyof typeof REPORT_TARGET_TYPE];
 
@@ -187,6 +188,47 @@ export const BAL_CATEGORY_MAP: Record<number, BalCategory> = BAL_CATEGORIES.redu
   (acc, c) => ({ ...acc, [c.id]: c }),
   {} as Record<number, BalCategory>
 );
+
+export const POST_IT_CATEGORY = {
+  LIGHTN: 'LIGHTN',
+  DAILY: 'DAILY',
+  LOVE: 'LOVE',
+  INFO: 'INFO',
+  QUESTION: 'QUESTION',
+  WORRY: 'WORRY',
+  FREE: 'FREE',
+} as const;
+export type PostItCategory = (typeof POST_IT_CATEGORY)[keyof typeof POST_IT_CATEGORY];
+
+export const FEEDBACK_TYPE = {
+  BUG: 'BUG',
+  FEATURE_REQUEST: 'FEATURE_REQUEST',
+} as const;
+export type FeedbackType = (typeof FEEDBACK_TYPE)[keyof typeof FEEDBACK_TYPE];
+
+export const FEEDBACK_STATUS = {
+  RECEIVED: 'RECEIVED',
+  IN_REVIEW: 'IN_REVIEW',
+  IN_PROGRESS: 'IN_PROGRESS',
+  RESOLVED: 'RESOLVED',
+  DEFERRED: 'DEFERRED',
+  CLOSED: 'CLOSED',
+} as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUS)[keyof typeof FEEDBACK_STATUS];
+
+export const FEEDBACK_CATEGORY = {
+  UI_BROKEN: 'UI_BROKEN',
+  FEATURE_NOT_WORK: 'FEATURE_NOT_WORK',
+  PERFORMANCE: 'PERFORMANCE',
+  NEW_FEATURE: 'NEW_FEATURE',
+  UX_DESIGN: 'UX_DESIGN',
+  PERF_IMPROVE: 'PERF_IMPROVE',
+  PAYMENT: 'PAYMENT',
+  NOTIFICATION: 'NOTIFICATION',
+  CHAT: 'CHAT',
+  ETC: 'ETC',
+} as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORY)[keyof typeof FEEDBACK_CATEGORY];
 
 export const AUDIT_ACTION = {
   PUBLISH_GAME: 'PUBLISH_GAME',

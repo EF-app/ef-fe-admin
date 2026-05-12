@@ -29,6 +29,21 @@ export interface User {
   update_time: string;
 }
 
+/** 관심 대상 — EF-FE profile-creation 의 interestTarget */
+export type InterestTarget = 'ACQUAINTANCE' | 'ALL' | 'LOVER';
+
+/** 관심사 키워드 8 그룹 (EF-FE KeywordSet 정합) */
+export interface ProfileKeywordSet {
+  lifestyle: string[];
+  hobby: string[];
+  outdoor: string[];
+  self_improve: string[];
+  food: string[];
+  sports: string[];
+  music: string[];
+  game: string[];
+}
+
 export interface UserProfile {
   user_id: number;
   match_purpose: MatchPurpose;
@@ -48,6 +63,46 @@ export interface UserProfile {
   profile_reviewed_by: number | null;
   create_time: string;
   update_time: string;
+
+  /* ── EF-FE profile-creation 확장 필드 (어드민 표시용, 모두 선택) ── */
+
+  /** 관심 대상 (지인 / 모두 / 애인) */
+  interest_target?: InterestTarget;
+  /** 관심사 키워드 8 그룹 — 각 그룹은 라벨 배열 */
+  keywords?: ProfileKeywordSet;
+  /** 사용자가 직접 추가한 나만의 태그 */
+  my_tags?: string[];
+
+  /** 음주 선호 주종 (라벨 배열) — drinking freq 와 별개 */
+  drink_types?: string[];
+  /** 흡연 종류 (라벨 배열) */
+  smoke_types?: string[];
+
+  /** 추가 외모/성향 */
+  vibe?: string;          // 성향 (외향적 등)
+
+  /* ── 추가 스타일 (EF-FE: ToggleSection) ── */
+  daily_type?: string;    // 일상 유형
+  religion?: string;
+  friends_around?: string; // 이쪽 지인
+  coming_out?: string;     // 커밍아웃 정도
+  fashion?: string;
+  grooming?: string;       // 꾸미는 스타일
+
+  /* ── 이상형 ── */
+  ideal_hair?: string;
+  ideal_body?: string;
+  ideal_height?: string;
+  ideal_vibe?: string;
+  important_points?: string[];
+
+  /* ── MBTI 부가 ── */
+  mbti_desc?: string;
+  mbti_emoji?: string;
+
+  /* ── 완성도 (BE 계산값) ── */
+  completion?: number;        // 0~100
+  completion_hint?: string;
 }
 
 export interface UserPhoto {
@@ -74,6 +129,101 @@ export interface UserSuspension {
   update_time: string;
 }
 
+export interface UserMatchSummary {
+  id: number;
+  partner_user_id: number;
+  partner_nickname: string;
+  matched_at: string;
+  is_active: boolean;
+  last_message_at: string | null;
+  message_count: number;
+}
+
+export interface UserBlock {
+  id: number;
+  blocked_user_id: number;
+  blocked_user_nickname: string;
+  blocked_user_uuid?: string;
+  blocked_at: string;
+  reason: string | null;
+}
+
+/** 이 유저가 다른 유저에게 차단당한 기록 */
+export interface UserBlockedBy {
+  id: number;
+  blocker_user_id: number;
+  blocker_user_nickname: string;
+  blocker_user_uuid?: string;
+  blocked_at: string;
+  reason: string | null;
+}
+
+/** 이 유저가 작성한 밸런스게임 댓글 */
+export interface UserBalGameComment {
+  id: number;
+  game_id: number;
+  game_option_a: string;
+  game_option_b: string;
+  content: string;
+  vote_choice: 'A' | 'B' | null;
+  like_count: number;
+  reply_count: number;
+  create_time: string;
+}
+
+export interface UserPostItSummary {
+  uuid: string;
+  category_code: string;
+  content_preview: string;
+  is_hidden: boolean;
+  is_deleted: boolean;
+  report_count: number;
+  reply_count: number;
+  create_time: string;
+}
+
+export interface UserReportSummary {
+  id: number;
+  target_type: string;
+  reason: string | null;
+  status: string;
+  create_time: string;
+}
+
+/** 이 유저가 다른 콘텐츠/유저에게 한 신고 (낸 신고) */
+export interface UserMadeReport {
+  id: number;
+  target_type: string;
+  /** 신고 대상 유저 닉네임 (BE 가 JOIN 해서 내려줌) */
+  target_user_nickname: string | null;
+  target_user_uuid: string | null;
+  reason: string | null;
+  status: string;
+  create_time: string;
+}
+
+/** 디바이스 종류 */
+export type LoginDevice = 'IOS' | 'ANDROID' | 'WEB';
+
+/** 로그인 시도 로그 — 보안·도용 조사용 */
+export interface UserLoginLog {
+  id: number;
+  /** 시도 시각 */
+  time: string;
+  /** 접속 IP */
+  ip: string;
+  /** 디바이스 종류 */
+  device: LoginDevice;
+  /** 디바이스 모델/User-Agent 요약 (예: "iPhone 15 Pro · iOS 17.4", "Chrome 124 · macOS") */
+  device_label: string | null;
+  /** 추정 위치 (예: "대한민국 · 서울") */
+  location: string | null;
+  /** 성공 여부 */
+  success: boolean;
+  /** 실패 시 사유 (INVALID_PASSWORD / INVALID_ID / ACCOUNT_LOCKED 등) */
+  failure_reason: string | null;
+}
+
 export interface UserDetail extends User {
   profile?: UserProfile;
   photos?: UserPhoto[];
@@ -81,6 +231,24 @@ export interface UserDetail extends User {
   suspensions?: UserSuspension[];
   report_count?: number;
   payment_total?: number;
+  /** 보유 잉크(별) 잔액 */
+  ink_balance?: number;
+  /** 프리미엄 회원 만료 시각 — null 이면 일반 회원 */
+  premium_until?: string | null;
+  is_premium?: boolean;
+  recent_matches?: UserMatchSummary[];
+  /** 이 유저가 차단한 사람들 */
+  blocks?: UserBlock[];
+  /** 이 유저를 차단한 사람들 (역방향) */
+  blocked_by?: UserBlockedBy[];
+  recent_post_its?: UserPostItSummary[];
+  recent_bal_comments?: UserBalGameComment[];
+  /** 받은 신고 — 이 유저가 신고 당한 기록 */
+  recent_reports?: UserReportSummary[];
+  /** 낸 신고 — 이 유저가 다른 대상에 대해 신고한 기록 */
+  recent_made_reports?: UserMadeReport[];
+  /** 최근 로그인 로그 — 보안·도용 조사용 */
+  recent_login_logs?: UserLoginLog[];
 }
 
 export interface UserListParams {

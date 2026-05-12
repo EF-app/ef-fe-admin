@@ -22,9 +22,12 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     const idCheck = validators.loginId(loginId)
-    const pwCheck = validators.password(password)
     if (!idCheck.valid) return setError(idCheck.message ?? '')
-    if (!pwCheck.valid) return setError(pwCheck.message ?? '')
+    // TODO: 비밀번호 정규식(최소 8자) 검증 — 데모/팀원 admin02/1234 로그인 위해 임시 주석.
+    //       BE 정책 확정 후 활성화 예정.
+    // const pwCheck = validators.password(password)
+    // if (!pwCheck.valid) return setError(pwCheck.message ?? '')
+    if (!password) return setError('비밀번호를 입력해주세요.')
     loginMutation.mutate({ login_id: loginId, password })
   }
 

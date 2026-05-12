@@ -63,4 +63,20 @@ export const ADMIN_ENDPOINTS = {
   // 감사 로그
   AUDIT_LOGS: '/api/admin/audit-logs',
   AUDIT_LOG_DETAIL: (id: number) => `/api/admin/audit-logs/${id}`,
+
+  // 제재 로그
+  SUSPENSION_LOGS: '/api/admin/suspension-logs',
+  SUSPENSION_LOG_DETAIL: (id: number) => `/api/admin/suspension-logs/${id}`,
+  SUSPENSION_LOG_LIFT: (id: number) => `/api/admin/suspension-logs/${id}/lift`,
+
+  // 포스트잇
+  POST_ITS: '/api/admin/post-its',
+  POST_IT_DETAIL: (uuid: string) => `/api/admin/post-its/${uuid}`,
+  POST_IT_HIDE: (uuid: string) => `/api/admin/post-its/${uuid}/hide`,
+  POST_IT_RESTORE: (uuid: string) => `/api/admin/post-its/${uuid}/restore`,
+
+  // 버그·기능 피드백
+  FEEDBACKS: '/api/admin/feedbacks',
+  FEEDBACK_DETAIL: (id: number) => `/api/admin/feedbacks/${id}`,
+  FEEDBACK_UPDATE: (id: number) => `/api/admin/feedbacks/${id}`,
 } as const;

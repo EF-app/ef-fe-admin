@@ -1,0 +1,118 @@
+/**
+ * 푸시 mock — 공지로부터 파생된 푸시, 마케팅 푸시, 긴급 푸시, 임의 푸시 케이스 포함.
+ */
+import type { Push } from '../types/push';
+import { mockPage } from './pageUtil';
+
+const now = new Date('2026-05-13T10:00:00.000Z');
+const past = (offsetMin: number) =>
+  new Date(now.getTime() - offsetMin * 60 * 1000).toISOString();
+const future = (offsetMin: number) =>
+  new Date(now.getTime() + offsetMin * 60 * 1000).toISOString();
+
+export const mockPushes: Push[] = [
+  {
+    id: 1,
+    title: '🎁 5월 신규 회원 혜택 이벤트',
+    body: '지금 가입하면 별 30개 + 슈퍼 좋아요 3회 무료!',
+    deepLink: 'ef://event/may-signup',
+    target: 'ALL',
+    segmentDesc: null,
+    kind: 'MARKETING',
+    linkedNoticeId: null,
+    scheduledAt: null,
+    sentAt: past(60 * 24),
+    sentCount: 14_280,
+    targetCount: 14_320,
+    status: 'SENT',
+    createTime: past(60 * 26),
+    createdBy: '운영 김',
+  },
+  {
+    id: 2,
+    title: '점검 안내 — 5월 14일 새벽 2시',
+    body: '5/14 02:00~04:00 서비스 점검이 있습니다. 이용에 참고 부탁드려요.',
+    deepLink: 'ef://notice/12',
+    target: 'ALL',
+    segmentDesc: null,
+    kind: 'NOTICE_LINK',
+    linkedNoticeId: 12,
+    scheduledAt: future(60 * 12),
+    sentAt: null,
+    sentCount: 0,
+    targetCount: 14_320,
+    status: 'SCHEDULED',
+    createTime: past(120),
+    createdBy: '운영 김',
+  },
+  {
+    id: 3,
+    title: '⚠️ 긴급 점검 안내',
+    body: '일시적 접속 장애가 발생했습니다. 복구 즉시 안내드리겠습니다.',
+    deepLink: null,
+    target: 'ALL',
+    segmentDesc: null,
+    kind: 'EMERGENCY',
+    linkedNoticeId: null,
+    scheduledAt: null,
+    sentAt: past(60 * 48),
+    sentCount: 13_950,
+    targetCount: 14_320,
+    status: 'SENT',
+    createTime: past(60 * 48 + 5),
+    createdBy: '운영 박',
+  },
+  {
+    id: 4,
+    title: '💎 프리미엄 가입자 한정 혜택',
+    body: '이번 달까지 프리미엄 회원에게만 슈퍼 좋아요 5개 추가 증정!',
+    deepLink: 'ef://premium',
+    target: 'PREMIUM',
+    segmentDesc: null,
+    kind: 'MARKETING',
+    linkedNoticeId: null,
+    scheduledAt: future(60 * 36),
+    sentAt: null,
+    sentCount: 0,
+    targetCount: 1_420,
+    status: 'SCHEDULED',
+    createTime: past(30),
+    createdBy: '운영 김',
+  },
+  {
+    id: 5,
+    title: '오랜만이에요 ☀️',
+    body: '7일 동안 못 봤어요. 새로운 인연이 기다리고 있어요!',
+    deepLink: 'ef://home',
+    target: 'SEGMENT',
+    segmentDesc: '7일 이상 미접속자',
+    kind: 'MARKETING',
+    linkedNoticeId: null,
+    scheduledAt: null,
+    sentAt: past(60 * 12),
+    sentCount: 2_140,
+    targetCount: 2_180,
+    status: 'SENT',
+    createTime: past(60 * 12 + 10),
+    createdBy: '운영 박',
+  },
+  {
+    id: 6,
+    title: '5월 이벤트 안내',
+    body: '5월 한 달간 신규 인연 매칭 시 별 5개 보너스!',
+    deepLink: 'ef://event/may',
+    target: 'ALL',
+    segmentDesc: null,
+    kind: 'NOTICE_LINK',
+    linkedNoticeId: 8,
+    scheduledAt: null,
+    sentAt: null,
+    sentCount: 0,
+    targetCount: 14_320,
+    status: 'DRAFT',
+    createTime: past(15),
+    createdBy: '운영 김',
+  },
+];
+
+export const mockPushesPage = mockPage(mockPushes);

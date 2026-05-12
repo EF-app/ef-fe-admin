@@ -3,19 +3,40 @@ import {
   Home,
   Users,
   AlertTriangle,
+  ShieldOff,
   CreditCard,
   Megaphone,
   Scale,
+  StickyNote,
   Heart,
   FileText,
+  Bug,
+  UserCheck,
+  Ban,
+  Filter,
+  TrendingUp,
+  Crown,
+  DollarSign,
+  RefreshCcw,
+  ShieldCheck,
+  BookOpen,
+  MessageSquare,
+  AlertOctagon,
+  Bell,
 } from 'lucide-react'
 import { useDashboardAlerts } from '@ef-fe-admin/shared'
+
+type BadgeKey =
+  | 'pending_reports'
+  | 'pending_refunds'
+  | 'pending_bal_applies'
+  | 'pending_profile_reviews'
 
 interface NavItemDef {
   to: string
   label: string
   icon: React.ReactNode
-  badgeKey?: 'pending_reports' | 'pending_refunds' | 'pending_bal_applies' | 'pending_profile_reviews'
+  badgeKey?: BadgeKey
 }
 
 const SECTIONS: { title: string; items: NavItemDef[] }[] = [
@@ -23,26 +44,78 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
     title: '운영',
     items: [
       { to: '/dashboard', label: '대시보드', icon: <Home size={16} /> },
-      { to: '/users', label: '유저 관리', icon: <Users size={16} /> },
-      { to: '/reports', label: '신고 처리', icon: <AlertTriangle size={16} />, badgeKey: 'pending_reports' },
-      { to: '/refunds', label: '환불·결제', icon: <CreditCard size={16} />, badgeKey: 'pending_refunds' },
+      { to: '/users', label: '유저 활동내역', icon: <Users size={16} /> },
+      {
+        to: '/profile-reviews',
+        label: '프로필 관리',
+        icon: <UserCheck size={16} />,
+        badgeKey: 'pending_profile_reviews',
+      },
+      { to: '/notices', label: '공지사항', icon: <Megaphone size={16} /> },
+      { to: '/pushes', label: '푸시 발송', icon: <Bell size={16} /> },
+    ],
+  },
+  {
+    title: '안전/CS',
+    items: [
+      { to: '/blocks', label: '차단 내역', icon: <Ban size={16} /> },
+      {
+        to: '/reports',
+        label: '신고 내역',
+        icon: <AlertTriangle size={16} />,
+        badgeKey: 'pending_reports',
+      },
+      { to: '/suspensions', label: '제재 로그', icon: <ShieldOff size={16} /> },
+      { to: '/feedback', label: '피드백', icon: <Bug size={16} /> },
+    ],
+  },
+  {
+    title: '매칭',
+    items: [
+      { to: '/matching', label: '매칭 대시보드', icon: <Heart size={16} /> },
+      { to: '/matching/rates', label: '매칭률 조정', icon: <Filter size={16} /> },
     ],
   },
   {
     title: '콘텐츠',
     items: [
-      { to: '/notices', label: '공지사항', icon: <Megaphone size={16} /> },
-      { to: '/balance', label: '밸런스 게임', icon: <Scale size={16} />, badgeKey: 'pending_bal_applies' },
-      { to: '/matching', label: '매칭 운영', icon: <Heart size={16} /> },
+      {
+        to: '/balance',
+        label: '밸런스 게임',
+        icon: <Scale size={16} />,
+        badgeKey: 'pending_bal_applies',
+      },
+      { to: '/post-its', label: '포스트잇', icon: <StickyNote size={16} /> },
+      { to: '/banned-words', label: '금칙어', icon: <AlertOctagon size={16} /> },
+    ],
+  },
+  {
+    title: '결제',
+    items: [
+      { to: '/revenue', label: '정산·매출', icon: <TrendingUp size={16} /> },
+      { to: '/payments', label: '결제 내역', icon: <CreditCard size={16} /> },
+      {
+        to: '/refunds',
+        label: '환불 내역',
+        icon: <RefreshCcw size={16} />,
+        badgeKey: 'pending_refunds',
+      },
+      { to: '/premium', label: '프리미엄 회원', icon: <Crown size={16} /> },
     ],
   },
   {
     title: '시스템',
     items: [
+      { to: '/admins', label: '관리자 계정', icon: <ShieldCheck size={16} /> },
       { to: '/audit', label: '감사 로그', icon: <FileText size={16} /> },
+      { to: '/policies', label: 'FAQ·약관·정책', icon: <BookOpen size={16} /> },
+      { to: '/system-messages', label: '시스템 메시지', icon: <MessageSquare size={16} /> },
     ],
   },
 ]
+
+// keep unused icons referenced for tree-shaking suppression in dev
+void DollarSign
 
 export default function Sidebar() {
   const { data: alerts } = useDashboardAlerts({
@@ -72,6 +145,7 @@ export default function Sidebar() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === '/matching'}
                 className={({ isActive }) =>
                   `flex items-center gap-2.5 px-3 py-2.5 rounded-md text-[13.5px] font-bold mb-0.5 transition ${
                     isActive

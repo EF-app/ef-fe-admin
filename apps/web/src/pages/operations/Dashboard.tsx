@@ -23,7 +23,7 @@ import {
   formatNumber,
   formatDateTime,
 } from '@ef-fe-admin/shared'
-import Topbar from '../components/layout/Topbar'
+import Topbar from '../../components/layout/Topbar'
 import dayjs from 'dayjs'
 
 export default function DashboardPage() {
@@ -44,7 +44,7 @@ export default function DashboardPage() {
       <div className="section-title flex items-center gap-2">
         <AlertTriangle size={15} className="text-warn" /> 대기 중 긴급 건
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         <button
           onClick={() => navigate('/reports')}
           className="card flex items-center gap-4 hover:shadow-md transition text-left"
@@ -79,7 +79,7 @@ export default function DashboardPage() {
 
       {/* 오늘의 지표 */}
       <div className="section-title">📊 오늘의 지표</div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           label="DAU"
           value={formatNumber(metrics?.dau)}
@@ -107,7 +107,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 차트 */}
-      <div className="grid grid-cols-2 gap-4 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mt-6">
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <div className="font-extrabold text-[14px]">최근 30일 DAU 추이</div>

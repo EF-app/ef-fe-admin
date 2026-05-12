@@ -1,24 +1,26 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuditLogs, formatDateTime } from '@ef-fe-admin/shared'
-import Topbar from '../components/layout/Topbar'
-import EmptyState from '../components/ui/EmptyState'
-import Pagination from '../components/ui/Pagination'
+import Topbar from '../../components/layout/Topbar'
+import EmptyState from '../../components/ui/EmptyState'
+import Pagination from '../../components/ui/Pagination'
 
 export default function AuditLogsPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(0)
   const { data, isLoading } = useAuditLogs({ page, size: 20 })
 
   return (
     <>
-      <Topbar title="감사 로그" subtitle="관리자 액션 이력 · 변경 스냅샷" />
+      <Topbar title="감사 로그" subtitle="관리자 액션 이력 — 행 클릭 시 변경 스냅샷 비교" />
 
-      <div className="card p-0">
+      <div className="card p-0 overflow-x-auto">
         {isLoading ? (
           <div className="p-10 text-center text-text-soft">불러오는 중...</div>
         ) : !data?.content?.length ? (
           <EmptyState title="감사 로그가 없습니다." />
         ) : (
-          <table className="data-table">
+          <table className="data-table min-w-[720px]">
             <thead>
               <tr>
                 <th>시각</th>
@@ -30,7 +32,11 @@ export default function AuditLogsPage() {
             </thead>
             <tbody>
               {data.content.map((log) => (
-                <tr key={log.id}>
+                <tr
+                  key={log.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/audit/${log.id}`)}
+                >
                   <td className="text-text-sub whitespace-nowrap">
                     {formatDateTime(log.create_time)}
                   </td>
