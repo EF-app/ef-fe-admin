@@ -16,10 +16,8 @@
     "jsx": "react-jsx",
 
     /* Paths */
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["./src/*"],
       "@ef-fe-admin/shared": ["../../packages/shared/src/index.ts"],
       "@ef-fe-admin/shared/*": ["../../packages/shared/src/*"]
     },
