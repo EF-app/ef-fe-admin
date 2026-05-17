@@ -163,24 +163,27 @@ type MutationOpts<TData, TVars> = UseMutationOptions<TData, NormalizedError, TVa
 /* ----------- 인증 ----------- */
 import { authBeApi } from '../api/authBe';
 import { ADMIN_ROLE } from '../constants/enums';
-import type { AdminRole } from '../constants/enums';
 
-/** BE 로그인 응답을 FE 의 AdminAccount 모양으로 변환 (없는 필드는 빈 값). */
+/**
+ * BE 로그인/me 응답을 FE 의 AdminAccount 모양으로 변환.
+ * BE 의 AdminLoginRspDto / AdminInfoRspDto 는 role 을 내려주지 않고
+ * 모든 관리자에게 단일 ROLE_ADMIN 권한이 JWT claim 으로만 박힘.
+ * 따라서 FE 측에서는 role 을 ADMIN_ROLE.ADMIN 으로 하드코딩한다.
+ * 향후 BE 가 응답 DTO 에 role 을 추가하면 인자로 받아 normalize 하는 가드 추가 예정.
+ */
 function adminAccountFromBe(be: {
   loginId: string;
   name: string;
-  role: string;
-  uuid?: string;
 }): AdminAccount {
   const now = new Date().toISOString();
   return {
     id: 0,
-    uuid: be.uuid ?? '',
+    uuid: '',
     login_id: be.loginId,
     name: be.name,
     email: '',
     phone: '',
-    role: be.role as AdminRole,
+    role: ADMIN_ROLE.ADMIN,
     is_active: true,
     deactivated_at: null,
     deactivated_reason: null,
@@ -254,6 +257,8 @@ export function useLoginMutation(options?: MutationOpts<LoginResponse, LoginRequ
           const be = await authBeApi.login({
             loginId: payload.login_id,
             password: payload.password,
+            scodeStep: false,
+            platform: 'WEB',
           });
           // refreshToken 은 localStorage 에 별도 보관 (인터셉터/갱신용)
           if (typeof window !== 'undefined' && be.refreshToken) {
