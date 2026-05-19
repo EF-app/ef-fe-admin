@@ -52,10 +52,11 @@ const AV_COLOR_MAP: Record<CommentAvatarColor, { bg: string; color: string }> = 
 export default function BalGameCommentsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const gameId = id ? Number(id) : undefined
+  // 라우트 path 가 :id 지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
+  const gameUuid = id ?? undefined
 
-  const { data: game } = useBalGameBeDetail(gameId)
-  const { data: comments, isLoading } = useBalGameCommentsBe(gameId)
+  const { data: game } = useBalGameBeDetail(gameUuid)
+  const { data: comments, isLoading } = useBalGameCommentsBe(gameUuid)
 
   const [suspendTarget, setSuspendTarget] = useState<{
     userUuid: string
@@ -284,15 +285,15 @@ function CommentBody({
   const displayName = revealReal ? item.authorRealNickname : item.displayNick
 
   const handleHide = () => {
-    if (item.isHidden) {
+    if (item.hidden) {
       if (!confirm('숨김을 해제할까요? 신고 카운트가 0으로 리셋됩니다.')) return
     } else {
       if (!confirm('이 댓글을 숨김 처리할까요?')) return
     }
-    // gameId 추출 — 댓글에 직접 들고 있으므로 사용. 답글은 replies 의 parent gameId 가 동일.
-    const gameId =
-      'gameId' in item ? item.gameId : ((item as unknown as { gameId: number }).gameId ?? 0)
-    hideMutation.mutate({ gameId, commentId: item.id })
+    // gameUuid 추출 — 댓글에 직접 들고 있으므로 사용. 답글은 replies 의 parent gameUuid 가 동일.
+    const gameUuid =
+      'gameUuid' in item ? (item as { gameUuid: string }).gameUuid : ''
+    hideMutation.mutate({ gameUuid, commentUuid: item.uuid })
   }
 
   return (
@@ -338,8 +339,8 @@ function CommentBody({
               <Flag size={9} /> {(item as BalCommentBe).voteChoice} 투표
             </Badge>
           )}
-          {item.isHidden && <Badge tone="warn">숨김</Badge>}
-          {item.isDeleted && <Badge tone="neutral">삭제</Badge>}
+          {item.hidden && <Badge tone="warn">숨김</Badge>}
+          {item.deleted && <Badge tone="neutral">삭제</Badge>}
           {item.reportCount > 0 && (
             <Badge tone="danger">
               <AlertTriangle size={9} /> 신고 {item.reportCount}
@@ -350,24 +351,18 @@ function CommentBody({
           </span>
         </div>
 
-        {/* 본문 */}
-        {item.isDeleted ? (
-          <div className="text-[12.5px] italic text-text-soft">
-            삭제된 댓글입니다.
-          </div>
-        ) : (
-          <div
-            className={`break-words leading-relaxed ${
-              isReply ? 'text-[12.5px]' : 'text-[13.5px]'
-            } ${item.isHidden ? 'opacity-50 line-through' : ''}`}
-            style={{ color: '#1C1A1F' }}
-          >
-            {item.text}
-          </div>
-        )}
+        {/* 본문 — 숨김/삭제도 본문은 노출. 상태는 1행의 뱃지로 표시. */}
+        <div
+          className={`break-words leading-relaxed ${
+            isReply ? 'text-[12.5px]' : 'text-[13.5px]'
+          } ${item.hidden || item.deleted ? 'opacity-60' : ''}`}
+          style={{ color: '#1C1A1F' }}
+        >
+          {item.text}
+        </div>
 
-        {/* 액션 행 */}
-        {!item.isDeleted && (
+        {/* 액션 행 — 삭제된 댓글은 추가 조치 불가하므로 숨김 */}
+        {!item.deleted && (
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="inline-flex items-center gap-1 text-text-soft">
               <Heart size={11} />
@@ -378,11 +373,11 @@ function CommentBody({
 
             <button
               type="button"
-              className={`btn btn-sm ${item.isHidden ? 'btn-primary' : 'btn-danger'}`}
+              className={`btn btn-sm ${item.hidden ? 'btn-primary' : 'btn-danger'}`}
               onClick={handleHide}
               disabled={hideMutation.isPending}
             >
-              {item.isHidden ? (
+              {item.hidden ? (
                 <>
                   <Eye size={11} /> 해제
                 </>

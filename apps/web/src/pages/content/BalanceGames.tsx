@@ -169,7 +169,8 @@ function GameList() {
             <BalanceCardAdmin
               key={g.id}
               game={g}
-              onClick={() => navigate(`/balance/${g.id}/edit`)}
+              onClick={() => navigate(`/balance/${g.id}`)}
+              onEdit={() => navigate(`/balance/${g.id}/edit`)}
             />
           ))}
         </div>
@@ -200,9 +201,11 @@ function GameList() {
 function BalanceCardAdmin({
   game,
   onClick,
+  onEdit,
 }: {
   game: BalGameBeSummary
   onClick: () => void
+  onEdit: () => void
 }) {
   const navigate = useNavigate()
   const cat = BAL_BE_CATEGORIES.find((c) => c.value === game.categoryCode)
@@ -356,7 +359,7 @@ function BalanceCardAdmin({
 
         {/* 하단 점선 구분선 + HOT/예약 + 댓글 */}
         <div
-          className="flex items-center mt-[14px] pt-3"
+          className="flex items-center mt-[14px] pt-3 gap-2 flex-wrap"
           style={{
             borderTopWidth: 1.5,
             borderTopColor: 'rgba(150,134,191,0.18)',
@@ -368,11 +371,23 @@ function BalanceCardAdmin({
               <span className="text-[10.5px] font-extrabold text-white">🔥 HOT</span>
             </div>
           ) : !isPublished ? (
-            <span className="text-[10.5px] text-text-soft font-bold">
+            <span className="text-[10.5px] text-text-soft font-bold min-w-0 truncate">
               {formatDateTime(game.createTime)}
             </span>
           ) : null}
-          <div className="flex-1" />
+          <div className="flex-1 min-w-0" />
+          {/* 수정 — 댓글 왼쪽에 배치 (버튼 스타일로 강조) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+            className="btn btn-secondary btn-sm flex-shrink-0"
+            title="이 게임 수정 페이지로"
+          >
+            <FileEdit size={12} /> 수정
+          </button>
           {/* 댓글 — 댓글 1개 이상이면 클릭 시 댓글 페이지로 이동 */}
           {game.commentCount > 0 ? (
             <button
@@ -381,7 +396,7 @@ function BalanceCardAdmin({
                 e.stopPropagation()
                 navigate(`/balance/${game.id}/comments`)
               }}
-              className="flex items-center gap-[5px] text-text-sub hover:text-point-dark transition rounded-md px-2 py-1 -mr-1 hover:bg-point-softer"
+              className="flex items-center gap-[5px] text-text-sub hover:text-point-dark transition rounded-md px-2 py-1 -mr-1 hover:bg-point-softer flex-shrink-0"
               title="댓글 보기"
             >
               <MessageCircle size={13} />
@@ -390,7 +405,7 @@ function BalanceCardAdmin({
               </span>
             </button>
           ) : (
-            <div className="flex items-center gap-[5px] text-text-soft">
+            <div className="flex items-center gap-[5px] text-text-soft flex-shrink-0">
               <MessageCircle size={13} />
               <span className="text-[12px] font-bold">댓글 0</span>
             </div>

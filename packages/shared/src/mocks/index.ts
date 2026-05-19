@@ -25,4 +25,5 @@ export * from './faqs';
 export * from './balGamesBe';
 export * from './postItsBe';
 export * from './balCommentsBe';
+export * from './balVotesBe';
 export * from './pushes';

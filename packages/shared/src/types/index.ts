@@ -21,5 +21,6 @@ export * from './noticeBe';
 export * from './faq';
 export * from './balGameBe';
 export * from './balCommentBe';
+export * from './balVoteBe';
 export * from './postItBe';
 export * from './push';

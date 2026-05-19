@@ -4,6 +4,8 @@ import type { PageResponse } from '../types/common';
 import type {
   Report,
   ReportListParams,
+  ReportGroup,
+  ReportGroupListParams,
   ProcessReportRequest,
 } from '../types/report';
 
@@ -11,6 +13,16 @@ export const reportsApi = {
   list: async (params?: ReportListParams): Promise<PageResponse<Report>> => {
     const { data } = await getApiClient().get<PageResponse<Report>>(
       ADMIN_ENDPOINTS.REPORTS,
+      { params }
+    );
+    return data;
+  },
+
+  listGrouped: async (
+    params?: ReportGroupListParams
+  ): Promise<PageResponse<ReportGroup>> => {
+    const { data } = await getApiClient().get<PageResponse<ReportGroup>>(
+      ADMIN_ENDPOINTS.REPORTS_GROUPED,
       { params }
     );
     return data;

@@ -4,6 +4,7 @@ export { authApi } from './auth';
 export { dashboardApi } from './dashboard';
 export { usersApi } from './users';
 export { reportsApi } from './reports';
+export { reportsBeApi } from './reportsBe';
 export { paymentsApi } from './payments';
 export { profileReviewsApi } from './profileReviews';
 export { noticesApi } from './notices';
@@ -16,6 +17,7 @@ export { noticesBeApi } from './noticesBe';
 export { authBeApi } from './authBe';
 export { balGamesBeApi } from './balGamesBe';
 export { postItsBeApi } from './postItsBe';
+// balVotesBeApi 는 balGamesBeApi.gameVotes 로 통합 — 별도 export 제거
 export type {
   AdminLoginBeReqDto,
   AdminLoginBeRspDto,

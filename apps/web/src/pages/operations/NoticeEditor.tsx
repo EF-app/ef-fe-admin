@@ -250,18 +250,14 @@ export default function NoticeEditorPage() {
         </div>
       )}
 
-      {/* 상태 헤더 */}
-      <div className="card mb-4">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6">
-          <div>
-            <div className="text-[11px] text-text-soft font-bold mb-1">현재 상태</div>
-            {existing ? (
+      {/* 상태 헤더 — 기존 공지 수정 시에만 노출 (신규/정정 등록에는 의미 없음) */}
+      {isEdit && existing && (
+        <div className="card mb-4">
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6">
+            <div>
+              <div className="text-[11px] text-text-soft font-bold mb-1">현재 상태</div>
               <StatusBadge status={existing.status} />
-            ) : (
-              <Badge tone="neutral">신규</Badge>
-            )}
-          </div>
-          {existing && (
+            </div>
             <div className="flex gap-6 text-[12px]">
               <div>
                 <div className="text-text-soft font-bold">작성자</div>
@@ -284,10 +280,10 @@ export default function NoticeEditorPage() {
                 </div>
               )}
             </div>
-          )}
-          <div />
+            <div />
+          </div>
         </div>
-      </div>
+      )}
 
       {readOnly && existing && (
         <div className="card mb-4 border-l-4 border-l-warn bg-[#FDF8EF]">
@@ -537,6 +533,14 @@ export default function NoticeEditorPage() {
             ※ 이 화면은 게시판 등록만 합니다. 푸시 알림은 발행 후 [이 글로 푸시 보내기] 또는 [푸시 발송] 페이지에서 별도로 작성합니다.
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => navigate('/notices')}
+              disabled={pending}
+            >
+              <ArrowLeft size={13} /> 목록으로 가기
+            </button>
             <button
               type="button"
               className="btn btn-secondary btn-sm"

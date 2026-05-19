@@ -43,15 +43,15 @@ export interface PostItBe {
   categoryCode: PostItCategory;
   content: string;
   color: PostItColor;
-  isAnonymous: boolean;
+  anonymous: boolean;
   expiresAt: string;
   pinnedUntil: string | null;
   reportCount: number;
   replyCount: number;
   /** 좋아요 누적 — BE 추가 예정 필드 (현 DDL 미포함). 미존재 시 0 */
   likeCount: number;
-  isHidden: boolean;
-  isDeleted: boolean;
+  hidden: boolean;
+  deleted: boolean;
   createTime: string;
   updateTime: string;
 }

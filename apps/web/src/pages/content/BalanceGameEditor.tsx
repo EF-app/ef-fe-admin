@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Save, Clock, Send, EyeOff, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, Clock, Send, EyeOff, Eye, AlertTriangle, Archive } from 'lucide-react'
 import {
   useBalGameBeDetail,
   useBalApplyBeDetail,
@@ -37,13 +37,14 @@ export default function BalanceGameEditorPage() {
   const navigate = useNavigate()
 
   const isEdit = Boolean(idParam)
-  const gameId = idParam ? Number(idParam) : undefined
+  // 라우트 path 가 :id 지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
+  const gameUuid = idParam ?? undefined
 
   const fromApply = searchParams.get('fromApply')
   const fromApplyId = fromApply ? Number(fromApply) : undefined
   const isFromApply = !isEdit && fromApplyId != null && !Number.isNaN(fromApplyId)
 
-  const { data: existing, isLoading: existingLoading } = useBalGameBeDetail(gameId)
+  const { data: existing, isLoading: existingLoading } = useBalGameBeDetail(gameUuid)
   const { data: applySource, isLoading: applyLoading } = useBalApplyBeDetail(
     isFromApply ? fromApplyId : undefined
   )
@@ -70,6 +71,8 @@ export default function BalanceGameEditorPage() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [pendingPayload, setPendingPayload] = useState<BalGameCreateRequest | null>(null)
+  // 상태 변경 (게시 중·숨김 게임 한정) — 미리보기/입력 영역은 readOnly 라도 상태 전환은 가능.
+  const [pendingStatusChange, setPendingStatusChange] = useState<BalGameBeStatus | null>(null)
 
   // 기존 게임 로드 시 프리필
   useEffect(() => {
@@ -89,27 +92,26 @@ export default function BalanceGameEditorPage() {
       setScheduledHour(Number(h))
       setScheduledMinute(Number(m))
     }
-    if (existing.scheduledEndAt) {
-      const [d, t] = existing.scheduledEndAt.split('T')
-      const [h, m] = (t ?? '00:00:00').split(':')
-      setEndDate(d)
-      setEndHour(Number(h))
-      setEndMinute(Number(m))
-    }
+    // scheduledEndAt 은 prefill 안 함 — BE 가 등록 다음날을 기본으로 채워 내려보내,
+    // 어드민이 수정 진입할 때마다 의미 없는 디폴트가 보이는 문제 회피. 필요 시 직접 입력.
   }, [existing, isEdit])
 
-  // 신청에서 진입 시 한 번만 프리필
-  const applyPrefilledRef = useRef(false)
+  // 신청에서 진입 시 한 번만 프리필.
+  // ref 에 어떤 apply id 로 prefill 했는지 기록 — placeholderData 가 잘못된 mock fallback 을
+  // 흘려도 fromApplyId 와 일치 안 하면 무시되고, BE 응답(올바른 id) 이 도착해야 prefill 실행.
+  const applyPrefilledRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!isFromApply || !applySource || applyPrefilledRef.current) return
+    if (!isFromApply || !applySource || fromApplyId == null) return
+    if (applySource.id !== fromApplyId) return
+    if (applyPrefilledRef.current === fromApplyId) return
     setOptionA(applySource.optionA)
     setOptionAEmoji(applySource.optionAEmoji ?? '')
     setOptionB(applySource.optionB)
     setOptionBEmoji(applySource.optionBEmoji ?? '')
     setDescription(applySource.description ?? '')
     setCategory(applySource.categoryCode)
-    applyPrefilledRef.current = true
-  }, [isFromApply, applySource])
+    applyPrefilledRef.current = fromApplyId
+  }, [isFromApply, applySource, fromApplyId])
 
   const createMutation = useCreateBalGameBeMutation({
     onSuccess: (g) => {
@@ -192,6 +194,9 @@ export default function BalanceGameEditorPage() {
       status,
       scheduledAt: scheduledIso,
       scheduledEndAt: endIso,
+      // 신청 승인 → 초안 흐름: BE 가 BalApply 를 PENDING → APPROVED 처리하고
+      // 신청자를 게임의 applicant 로 연결하도록 apply 의 id 를 전달.
+      applyId: isFromApply ? fromApplyId ?? null : null,
     }
   }
 
@@ -200,11 +205,42 @@ export default function BalanceGameEditorPage() {
     if (payload) setPendingPayload(payload)
   }
 
+  // 게시 중/숨김 게임에서 일정(예약·자동종료) 만 따로 저장.
+  // 내용 변경은 잠겨도 일정은 운영 중에 조정해야 하는 케이스 (자동 종료 시각 추가 등).
+  const handleSaveSchedule = () => {
+    if (!isEdit || gameUuid == null) return
+    setError(null)
+    const scheduledIso = hasScheduleInputs
+      ? buildIso(scheduledDate, scheduledHour, scheduledMinute)
+      : null
+    const endIso = hasEndInputs ? buildIso(endDate, endHour, endMinute) : null
+
+    if (
+      endIso &&
+      scheduledIso &&
+      new Date(endIso).getTime() <= new Date(scheduledIso).getTime()
+    ) {
+      setError('자동 종료 시각은 예약 시각 이후여야 합니다.')
+      return
+    }
+    if (endIso && new Date(endIso).getTime() <= Date.now()) {
+      setError('자동 종료 시각은 현재 시각 이후여야 합니다.')
+      return
+    }
+    updateMutation.mutate({
+      gameUuid,
+      payload: {
+        scheduledAt: scheduledIso,
+        scheduledEndAt: endIso,
+      },
+    })
+  }
+
   const executeSubmit = () => {
     if (!pendingPayload) return
-    if (isEdit && gameId != null) {
+    if (isEdit && gameUuid != null) {
       updateMutation.mutate(
-        { id: gameId, payload: pendingPayload },
+        { gameUuid, payload: pendingPayload },
         { onSettled: () => setPendingPayload(null) }
       )
     } else {
@@ -239,7 +275,7 @@ export default function BalanceGameEditorPage() {
           isFromApply
             ? `신청 #${fromApplyId} 의 내용을 가져왔습니다. 다듬어서 등록하세요.`
             : isEdit
-              ? `게임 #${gameId} · ${existing ? BAL_GAME_BE_STATUS_LABEL[existing.status] : ''}`
+              ? `게임 ${existing ? `#${existing.id}` : ''} · ${existing ? BAL_GAME_BE_STATUS_LABEL[existing.status] : ''}`
               : '두 가지 선택지를 입력하고 카테고리를 골라 초안/예약/즉시 발행 중 선택'
         }
       />
@@ -350,8 +386,9 @@ export default function BalanceGameEditorPage() {
         </PhonePreviewFrame>
       </div>
 
-      {/* 일정 */}
-      {!readOnly && (
+      {/* 일정 — ARCHIVED 가 아니면 항상 노출.
+          readOnly (PUBLISHED) 일 때는 내용은 잠기더라도 일정만 따로 저장 가능. */}
+      {existing?.status !== 'ARCHIVED' && (
         <div className="card mb-4 space-y-3">
           <SectionLabel>일정</SectionLabel>
 
@@ -371,7 +408,9 @@ export default function BalanceGameEditorPage() {
               minDate={minDate}
             />
             <div className="text-[11px] text-text-soft mt-1">
-              비워두면 "초안" 또는 "즉시 발행"만 가능합니다.
+              {readOnly
+                ? '게시 중에는 예약 시각이 기록 보존용 — 실제 노출 시점은 이미 지났습니다.'
+                : '비워두면 "초안" 또는 "즉시 발행"만 가능합니다.'}
             </div>
           </div>
 
@@ -394,6 +433,22 @@ export default function BalanceGameEditorPage() {
               지정 시각에 자동으로 ARCHIVED 처리됩니다.
             </div>
           </div>
+
+          {readOnly && isEdit && (
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <div className="text-[11.5px] text-text-soft">
+                ※ 내용 수정은 잠겼지만 일정은 운영 중에도 조정 가능합니다.
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={updateMutation.isPending}
+                onClick={handleSaveSchedule}
+              >
+                <Save size={13} />{' '}
+                {updateMutation.isPending ? '저장 중...' : '일정 저장'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -408,6 +463,54 @@ export default function BalanceGameEditorPage() {
         </div>
       )}
 
+      {/* 상태 관리 — 게시 중(PUBLISHED) / 숨김(HIDDEN) 일 때만 노출.
+          내용 수정은 잠겨도 상태 전환은 가능. ARCHIVED 는 terminal 이라 제외. */}
+      {isEdit && existing && (existing.status === 'PUBLISHED' || existing.status === 'HIDDEN') && (
+        <div className="card mb-4">
+          <SectionLabel>상태 관리</SectionLabel>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-[12.5px] text-text-sub">
+              현재 상태:{' '}
+              <span className="font-extrabold text-text">
+                {BAL_GAME_BE_STATUS_LABEL[existing.status]}
+              </span>
+              <span className="text-text-soft ml-2">
+                {existing.status === 'PUBLISHED'
+                  ? '— 숨김으로 잠시 내리거나, 종료로 영구 마감할 수 있습니다.'
+                  : '— 다시 게시하거나 종료할 수 있습니다.'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {existing.status === 'HIDDEN' && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={pending}
+                  onClick={() => setPendingStatusChange('PUBLISHED')}
+                >
+                  <Eye size={13} /> 다시 게시
+                </button>
+              )}
+              {existing.status === 'PUBLISHED' && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={pending}
+                  onClick={() => setPendingStatusChange('HIDDEN')}
+                >
+                  <EyeOff size={13} /> 숨김 처리
+                </button>
+              )}
+              <button
+                className="btn btn-danger btn-sm"
+                disabled={pending}
+                onClick={() => setPendingStatusChange('ARCHIVED')}
+              >
+                <Archive size={13} /> 종료 처리
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 액션 바 */}
       {!readOnly && (
         <div className="card flex items-center justify-between">
@@ -415,6 +518,14 @@ export default function BalanceGameEditorPage() {
             ※ 초안 저장 후에도 언제든 예약/발행으로 전환 가능합니다.
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => navigate('/balance')}
+              disabled={pending}
+            >
+              <ArrowLeft size={13} /> 목록으로 가기
+            </button>
             <button
               className="btn btn-secondary btn-sm"
               disabled={pending}
@@ -447,6 +558,21 @@ export default function BalanceGameEditorPage() {
           pending={pending}
           onCancel={() => setPendingPayload(null)}
           onConfirm={executeSubmit}
+        />
+      )}
+
+      {pendingStatusChange && gameUuid != null && (
+        <StatusChangeDialog
+          target={pendingStatusChange}
+          currentLabel={existing ? BAL_GAME_BE_STATUS_LABEL[existing.status] : ''}
+          pending={updateMutation.isPending}
+          onCancel={() => setPendingStatusChange(null)}
+          onConfirm={() => {
+            updateMutation.mutate(
+              { gameUuid, payload: { status: pendingStatusChange } },
+              { onSettled: () => setPendingStatusChange(null) }
+            )
+          }}
         />
       )}
     </>
@@ -959,6 +1085,91 @@ function ConfirmDialog({
           </button>
           <button
             className={`btn btn-sm ${meta.tone === 'primary' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? '처리 중...' : meta.label}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 게시 중 / 숨김 상태 게임에서 상태만 전환하는 확인 다이얼로그.
+ * - PUBLISHED → HIDDEN : 잠시 내림 (복구 가능)
+ * - PUBLISHED → ARCHIVED : 영구 종료 (복구 불가)
+ * - HIDDEN → PUBLISHED : 다시 노출
+ * - HIDDEN → ARCHIVED : 영구 종료
+ */
+function StatusChangeDialog({
+  target,
+  currentLabel,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  target: BalGameBeStatus
+  currentLabel: string
+  pending: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const meta =
+    target === 'PUBLISHED'
+      ? {
+          title: '다시 게시하시겠습니까?',
+          body: '유저 화면에 다시 노출됩니다. 누적 투표·댓글은 그대로 유지됩니다.',
+          label: '다시 게시',
+          tone: 'primary' as const,
+        }
+      : target === 'HIDDEN'
+        ? {
+            title: '숨김 처리하시겠습니까?',
+            body: '유저 화면에서 즉시 숨겨집니다. "다시 게시" 로 언제든 복구할 수 있고, 누적 투표·댓글은 보존됩니다.',
+            label: '숨김',
+            tone: 'secondary' as const,
+          }
+        : {
+            title: '종료 처리하시겠습니까?',
+            body: '영구 종료되어 더 이상 게시·복구할 수 없습니다. 누적 통계는 보존됩니다.',
+            label: '종료',
+            tone: 'danger' as const,
+          }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(43,39,48,0.5)] backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-surface rounded-xl shadow-lg p-6 w-full max-w-[460px] mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-[17px] font-extrabold mb-2">{meta.title}</div>
+        <div className="text-[13px] text-text-sub leading-relaxed mb-4">{meta.body}</div>
+        <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1 mb-5">
+          <div className="flex justify-between">
+            <span className="text-text-soft font-bold">현재</span>
+            <span className="font-bold">{currentLabel}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-text-soft font-bold">변경 후</span>
+            <span className="font-extrabold">{BAL_GAME_BE_STATUS_LABEL[target]}</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={pending}>
+            취소
+          </button>
+          <button
+            className={`btn btn-sm ${
+              meta.tone === 'primary'
+                ? 'btn-primary'
+                : meta.tone === 'danger'
+                  ? 'btn-danger'
+                  : 'btn-secondary'
+            }`}
             onClick={onConfirm}
             disabled={pending}
           >

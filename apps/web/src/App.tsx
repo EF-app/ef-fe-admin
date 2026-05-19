@@ -31,6 +31,8 @@ import MatchingRatesPage from './pages/matching/MatchingRates'
 // 콘텐츠
 import BalanceGamesPage from './pages/content/BalanceGames'
 import BalanceGameEditorPage from './pages/content/BalanceGameEditor'
+import BalanceGameDetailPage from './pages/content/BalanceGameDetail'
+import BalanceGameVotesPage from './pages/content/BalanceGameVotes'
 import BalGameCommentsPage from './pages/content/BalGameComments'
 import PostItsPage from './pages/content/PostIts'
 import BannedWordsPage from './pages/content/BannedWords'
@@ -107,7 +109,9 @@ export default function App() {
         {/* 콘텐츠 */}
         <Route path="balance" element={<BalanceGamesPage />} />
         <Route path="balance/new" element={<BalanceGameEditorPage />} />
+        <Route path="balance/:id" element={<BalanceGameDetailPage />} />
         <Route path="balance/:id/edit" element={<BalanceGameEditorPage />} />
+        <Route path="balance/:id/votes" element={<BalanceGameVotesPage />} />
         <Route path="balance/:id/comments" element={<BalGameCommentsPage />} />
         <Route path="post-its" element={<PostItsPage />} />
         <Route path="banned-words" element={<BannedWordsPage />} />

@@ -22,6 +22,7 @@ export const ADMIN_ENDPOINTS = {
 
   // 신고
   REPORTS: '/api/admin/reports',
+  REPORTS_GROUPED: '/api/admin/reports/grouped',
   REPORT_DETAIL: (id: number) => `/api/admin/reports/${id}`,
   REPORT_PROCESS: (id: number) => `/api/admin/reports/${id}/process`,
   REPORT_DISMISS: (id: number) => `/api/admin/reports/${id}/dismiss`,

@@ -10,6 +10,8 @@ export type CommentAvatarColor = 'purple' | 'blue' | 'green' | 'amber' | 'pink';
 
 export interface BalCommentReplyBe {
   id: number;
+  /** BE 외부 노출 식별자 (uuid). API path 호출에 사용. */
+  uuid: string;
   /** 표시용 닉네임 (BE 가 랜덤 부여, 익명에 가까운 동물 이름 등) */
   displayNick: string;
   letter: string;
@@ -26,13 +28,16 @@ export interface BalCommentReplyBe {
 
   likes: number;
   reportCount: number;
-  isHidden: boolean;
-  isDeleted: boolean;
+  hidden: boolean;
+  deleted: boolean;
 }
 
 export interface BalCommentBe {
   id: number;
-  gameId: number;
+  /** BE 외부 노출 식별자 (uuid). API path 호출에 사용. */
+  uuid: string;
+  /** 부모 게임의 uuid (API path 호출에 사용) */
+  gameUuid: string;
 
   displayNick: string;
   letter: string;
@@ -50,8 +55,8 @@ export interface BalCommentBe {
 
   likes: number;
   reportCount: number;
-  isHidden: boolean;
-  isDeleted: boolean;
+  hidden: boolean;
+  deleted: boolean;
 
   replies: BalCommentReplyBe[];
 }

@@ -208,6 +208,7 @@ function PostItCard({
         >
           {POST_IT_CATEGORY_LABEL[post.categoryCode]}
         </span>
+        {post.anonymous && <Badge tone="neutral">익명 글</Badge>}
         {isPinned && (
           <span className="text-[10.5px] font-extrabold text-warn">📌 고정</span>
         )}
@@ -218,19 +219,19 @@ function PostItCard({
               <AlertTriangle size={10} className="inline" /> 신고 {post.reportCount}
             </Badge>
           )}
-          {post.isHidden && (
+          {post.hidden && (
             <Badge tone="warn">
               <EyeOff size={10} className="inline" /> 숨김
             </Badge>
           )}
-          {post.isDeleted && <Badge tone="neutral">삭제됨</Badge>}
+          {post.deleted && <Badge tone="neutral">삭제됨</Badge>}
         </div>
       </div>
 
       {/* 2행: 작성자 정보 ↔ 작성 시각 */}
       <div className="flex items-baseline justify-between mb-3 gap-2">
         <div className="text-[12.5px] font-bold flex items-baseline gap-1.5 min-w-0 flex-1">
-          {post.isAnonymous && !reveal ? (
+          {post.anonymous && !reveal ? (
             <span
               role="button"
               tabIndex={0}
@@ -245,18 +246,9 @@ function PostItCard({
               <UserCheck size={11} />
               <span className="font-extrabold text-[12px]">작성자 보기</span>
             </span>
-          ) : post.isAnonymous && reveal ? (
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={toggleReveal}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') toggleReveal(e)
-              }}
-              className="inline-flex items-baseline gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -ml-1.5 hover:bg-[rgba(150,134,191,0.06)] transition"
-              title="다시 익명으로 숨기기"
-            >
-              <UserCheck size={11} className="text-point-dark self-center" />
+          ) : post.anonymous && reveal ? (
+            <span className="inline-flex items-baseline gap-1.5 min-w-0">
+              <UserCheck size={11} className="text-point-dark self-center flex-shrink-0" />
               <span className="font-extrabold truncate text-[12px]" style={{ color: '#7E6BAD' }}>
                 {post.userNickname}
               </span>
@@ -266,6 +258,16 @@ function PostItCard({
               {post.userArea && (
                 <span className="text-text-sub text-[11.5px]">· {post.userArea}</span>
               )}
+              <button
+                type="button"
+                onClick={toggleReveal}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') toggleReveal(e)
+                }}
+                className="ml-1 text-[10.5px] font-bold text-text-soft hover:text-point-dark underline flex-shrink-0"
+              >
+                익명으로 숨기기
+              </button>
             </span>
           ) : (
             <>
@@ -360,7 +362,7 @@ function PostItDetailModal({
   const restoreMutation = useRestorePostItBeMutation({ onSuccess: onClose })
 
   const bg = POST_IT_COLOR_HEX[post.color] ?? '#EEE9F6'
-  const showAuthor = !post.isAnonymous || revealAuthor
+  const showAuthor = !post.anonymous || revealAuthor
 
   return (
     <>
@@ -369,15 +371,15 @@ function PostItDetailModal({
           {/* 메타 뱃지들 (같은 줄) */}
           <div className="flex items-center gap-2 flex-wrap">
             <Badge tone="point">{POST_IT_CATEGORY_LABEL[post.categoryCode]}</Badge>
-            {post.isAnonymous && <Badge tone="neutral">익명 글</Badge>}
+            {post.anonymous && <Badge tone="neutral">익명 글</Badge>}
             <div className="flex-1" />
             {post.reportCount > 0 && (
               <Badge tone="danger">
                 <AlertTriangle size={10} /> 신고 {post.reportCount}
               </Badge>
             )}
-            {post.isHidden && <Badge tone="warn">숨김 처리됨</Badge>}
-            {post.isDeleted && <Badge tone="neutral">삭제됨</Badge>}
+            {post.hidden && <Badge tone="warn">숨김 처리됨</Badge>}
+            {post.deleted && <Badge tone="neutral">삭제됨</Badge>}
           </div>
 
           {/* 작성자 — 익명 글이면 기본 숨김, 버튼으로 토글 */}
@@ -397,7 +399,7 @@ function PostItDetailModal({
                   {post.userArea && (
                     <span className="text-text-sub text-[12px]">· {post.userArea}</span>
                   )}
-                  {post.isAnonymous && (
+                  {post.anonymous && (
                     <button
                       type="button"
                       onClick={() => setRevealAuthor(false)}
@@ -465,7 +467,7 @@ function PostItDetailModal({
             </div>
           </div>
 
-          {!post.isDeleted && (
+          {!post.deleted && (
             <>
               <hr className="border-border" />
 
@@ -537,7 +539,7 @@ function PostItDetailModal({
                   >
                     <Ban size={13} /> 작성자 제재
                   </button>
-                  {!post.isHidden ? (
+                  {!post.hidden ? (
                     <button
                       className="btn btn-danger btn-sm"
                       onClick={() => setConfirmMode('hide')}
@@ -563,7 +565,7 @@ function PostItDetailModal({
         <SuspendAuthorModal
           userUuid={post.userUuid}
           nickname={post.userNickname}
-          isAnonymous={post.isAnonymous}
+          isAnonymous={post.anonymous}
           onClose={() => setSuspendOpen(false)}
           onDone={onClose}
         />

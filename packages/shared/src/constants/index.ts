@@ -15,6 +15,7 @@ export const QUERY_KEYS = {
   USERS: (params?: unknown) => ['users', params] as const,
   USER_DETAIL: (userId: string | number) => ['users', userId] as const,
   REPORTS: (params?: unknown) => ['reports', params] as const,
+  REPORTS_GROUPED: (params?: unknown) => ['reports', 'grouped', params] as const,
   REPORT_DETAIL: (reportId: string | number) => ['reports', reportId] as const,
   PAYMENTS: (params?: unknown) => ['payments', params] as const,
   PAYMENT_DETAIL: (paymentId: string | number) => ['payments', paymentId] as const,

@@ -84,10 +84,10 @@ export default function ReportDetailPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12.5px]">
           <Field label="신고 대상">
             <button
-              disabled={!report.target_user_uuid}
+              disabled={report.target_user_id == null}
               onClick={() =>
-                report.target_user_uuid &&
-                navigate(`/users/${report.target_user_uuid}`)
+                report.target_user_id != null &&
+                navigate(`/users/${report.target_user_id}`)
               }
               className="font-extrabold text-point-dark hover:underline disabled:text-text disabled:no-underline text-left"
             >
