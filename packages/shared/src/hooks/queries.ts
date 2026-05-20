@@ -1693,7 +1693,6 @@ export function useDecideBalApplyMutation(
           // 승인일 경우 DRAFT BalGame 생성 (mock)
           const summary: BalGameBeSummary = {
             id: Date.now(),
-            uuid: `balgame-mock-uuid-${Date.now()}`,
             optionA: target.optionA,
             optionADesc: null,
             optionB: target.optionB,
@@ -1727,7 +1726,6 @@ export function useDecideBalApplyMutation(
           // mutation 시그니처(BalGameBeSummary) 호환을 위한 dummy. 호출부는 반환값을 사용하지 않음.
           return {
             id: 0,
-            uuid: '',
             optionA: rejected.optionA,
             optionADesc: null,
             optionB: rejected.optionB,
@@ -1802,21 +1800,21 @@ export function useBalGamesBe(
 }
 
 export function useBalGameBeDetail(
-  gameUuid: string | undefined,
+  gameId: number | undefined,
   options?: QueryOpts<BalGameBe>
 ) {
   // mock 분기에서는 voteStats 도 동적으로 생성해 단건 상세 화면이 자연스럽게 보이도록.
   // BE 분기는 BE 가 voteStats 를 포함해 내려보냄.
-  const base = mockBalGamesBe.find((g) => g.uuid === gameUuid) ?? mockBalGamesBe[0];
+  const base = mockBalGamesBe.find((g) => g.id === gameId) ?? mockBalGamesBe[0];
   const fallback: BalGameBe =
-    gameUuid != null ? { ...base, voteStats: buildMockVoteStats(base.id) } : base;
+    gameId != null ? { ...base, voteStats: buildMockVoteStats(base.id) } : base;
   return useQuery<BalGameBe, NormalizedError>({
-    queryKey: QUERY_KEYS.BAL_GAME_BE_DETAIL(gameUuid ?? ''),
+    queryKey: QUERY_KEYS.BAL_GAME_BE_DETAIL(gameId ?? 0),
     // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     queryFn: isMockMode()
       ? mocked(fallback)
-      : () => balGamesBeApi.gameDetail(gameUuid!),
-    enabled: gameUuid != null,
+      : () => balGamesBeApi.gameDetail(gameId!),
+    enabled: gameId != null,
     placeholderData: fallback,
     ...options,
   });
@@ -1834,7 +1832,6 @@ export function useCreateBalGameBeMutation(
       ? (payload) => {
           const next: BalGameBe = {
             id: Date.now(),
-            uuid: `balgame-mock-uuid-${Date.now()}`,
             optionA: payload.optionA,
             optionADesc: payload.optionADesc ?? null,
             optionAEmoji: payload.optionAEmoji ?? null,
@@ -1876,30 +1873,30 @@ import {
 import type { BalCommentBe } from '../types/balCommentBe';
 
 export function useBalGameCommentsBe(
-  gameUuid: string | undefined,
+  gameId: number | undefined,
   options?: QueryOpts<BalCommentBe[]>
 ) {
-  const fallback = gameUuid != null ? getMockBalComments(gameUuid) : [];
+  const fallback = gameId != null ? getMockBalComments(gameId) : [];
   return useQuery<BalCommentBe[], NormalizedError>({
-    queryKey: ['bal-comments-be', gameUuid],
+    queryKey: ['bal-comments-be', gameId],
     // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     queryFn: isMockMode()
       ? mocked(fallback)
-      : () => balGamesBeApi.gameComments(gameUuid!),
-    enabled: gameUuid != null,
+      : () => balGamesBeApi.gameComments(gameId!),
+    enabled: gameId != null,
     placeholderData: fallback,
     ...options,
   });
 }
 
 export function useHideBalCommentMutation(
-  options?: MutationOpts<BalCommentBe, { gameUuid: string; commentUuid: string }>
+  options?: MutationOpts<BalCommentBe, { gameId: number; commentId: number }>
 ) {
   const qc = useQueryClient();
-  return useMutation<BalCommentBe, NormalizedError, { gameUuid: string; commentUuid: string }>({
-    mutationFn: ({ gameUuid, commentUuid }) => {
-      const list = mockBalCommentsByGame[gameUuid] ?? [];
-      const target = list.find((c) => c.uuid === commentUuid);
+  return useMutation<BalCommentBe, NormalizedError, { gameId: number; commentId: number }>({
+    mutationFn: ({ gameId, commentId }) => {
+      const list = mockBalCommentsByGame[gameId] ?? [];
+      const target = list.find((c) => c.id === commentId);
       if (!target) throw new Error('댓글을 찾을 수 없습니다.');
       target.hidden = !target.hidden;
       if (!target.hidden) target.reportCount = 0;
@@ -1907,7 +1904,7 @@ export function useHideBalCommentMutation(
     },
     onSuccess: (...args) => {
       const [, vars] = args;
-      qc.invalidateQueries({ queryKey: ['bal-comments-be', vars.gameUuid] });
+      qc.invalidateQueries({ queryKey: ['bal-comments-be', vars.gameId] });
       options?.onSuccess?.(...args);
     },
     ...options,
@@ -1917,15 +1914,15 @@ export function useHideBalCommentMutation(
 export function useUpdateBalGameBeMutation(
   options?: MutationOpts<
     BalGameBe,
-    { gameUuid: string; payload: BalGameUpdateRequest }
+    { gameId: number; payload: BalGameUpdateRequest }
   >
 ) {
   const qc = useQueryClient();
-  return useMutation<BalGameBe, NormalizedError, { gameUuid: string; payload: BalGameUpdateRequest }>({
+  return useMutation<BalGameBe, NormalizedError, { gameId: number; payload: BalGameUpdateRequest }>({
     // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     mutationFn: isMockMode()
-      ? ({ gameUuid, payload }) => {
-          const target = mockBalGamesBe.find((g) => g.uuid === gameUuid)!;
+      ? ({ gameId, payload }) => {
+          const target = mockBalGamesBe.find((g) => g.id === gameId)!;
           if (payload.optionA !== undefined) target.optionA = payload.optionA;
           if (payload.optionB !== undefined) target.optionB = payload.optionB;
           if (payload.optionADesc !== undefined) target.optionADesc = payload.optionADesc ?? null;
@@ -1940,11 +1937,11 @@ export function useUpdateBalGameBeMutation(
           target.updateTime = new Date().toISOString().slice(0, 19);
           return Promise.resolve(target);
         }
-      : ({ gameUuid, payload }) => balGamesBeApi.updateGame(gameUuid, payload),
+      : ({ gameId, payload }) => balGamesBeApi.updateGame(gameId, payload),
     onSuccess: (...args) => {
       const [, vars] = args;
       qc.invalidateQueries({ queryKey: ['bal-games-be'] });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.BAL_GAME_BE_DETAIL(vars.gameUuid) });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.BAL_GAME_BE_DETAIL(vars.gameId) });
       options?.onSuccess?.(...args);
     },
     ...options,
@@ -1994,19 +1991,19 @@ export function usePostItsBe(
 }
 
 export function useHidePostItBeMutation(
-  options?: MutationOpts<PostItBe, { uuid: string; reason?: string }>
+  options?: MutationOpts<PostItBe, { id: number; reason?: string }>
 ) {
   const qc = useQueryClient();
-  return useMutation<PostItBe, NormalizedError, { uuid: string; reason?: string }>({
-    // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{uuid}/hide). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
+  return useMutation<PostItBe, NormalizedError, { id: number; reason?: string }>({
+    // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{id}/hide). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
-      ? ({ uuid }) => {
-          const target = mockPostItsBe.find((p) => p.uuid === uuid)!;
+      ? ({ id }) => {
+          const target = mockPostItsBe.find((p) => p.id === id)!;
           target.hidden = true;
           target.updateTime = new Date().toISOString().slice(0, 19);
           return Promise.resolve(target);
         }
-      : ({ uuid, reason }) => postItsBeApi.hide(uuid, reason),
+      : ({ id, reason }) => postItsBeApi.hide(id, reason),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['post-its-be'] });
       options?.onSuccess?.(...args);
@@ -2015,21 +2012,21 @@ export function useHidePostItBeMutation(
   });
 }
 
-export function useRestorePostItBeMutation(options?: MutationOpts<PostItBe, string>) {
+export function useRestorePostItBeMutation(options?: MutationOpts<PostItBe, number>) {
   const qc = useQueryClient();
-  return useMutation<PostItBe, NormalizedError, string>({
-    // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{uuid}/restore — is_hidden=false + report_count=0 리셋).
+  return useMutation<PostItBe, NormalizedError, number>({
+    // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{id}/restore — is_hidden=false + report_count=0 리셋).
     // VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
-      ? (uuid) => {
-          const target = mockPostItsBe.find((p) => p.uuid === uuid)!;
+      ? (id) => {
+          const target = mockPostItsBe.find((p) => p.id === id)!;
           target.hidden = false;
           // DDL 주석: 숨김 해제 시 report_count 도 0 리셋
           target.reportCount = 0;
           target.updateTime = new Date().toISOString().slice(0, 19);
           return Promise.resolve(target);
         }
-      : (uuid) => postItsBeApi.restore(uuid),
+      : (id) => postItsBeApi.restore(id),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['post-its-be'] });
       options?.onSuccess?.(...args);
@@ -2050,13 +2047,13 @@ import {
 } from '../mocks/balVotesBe';
 
 export function useBalGameVotesBe(
-  gameUuid: string | undefined,
+  gameId: number | undefined,
   params?: AdminBalVoteListParams,
   options?: QueryOpts<MockBalVotePage>
 ) {
   const fallback =
-    gameUuid != null
-      ? buildMockBalVotePage(gameUuid, params)
+    gameId != null
+      ? buildMockBalVotePage(gameId, params)
       : {
           content: [] as AdminBalVote[],
           page: 0,
@@ -2066,13 +2063,13 @@ export function useBalGameVotesBe(
           last: true,
         };
   return useQuery<MockBalVotePage, NormalizedError>({
-    queryKey: ['admin-bal-votes', gameUuid, params],
-    // BE 연결됨 (AdminBalVoteController GET /v1/admin/bal-game/{gameUuid}/votes).
+    queryKey: ['admin-bal-votes', gameId, params],
+    // BE 연결됨 (AdminBalVoteController GET /v1/admin/bal-game/{gameId}/votes).
     // VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     queryFn: isMockMode()
       ? mocked(fallback)
       : async () => {
-          const r = await balGamesBeApi.gameVotes(gameUuid!, params);
+          const r = await balGamesBeApi.gameVotes(gameId!, params);
           return {
             content: r.content,
             page: r.number,
@@ -2082,7 +2079,7 @@ export function useBalGameVotesBe(
             last: r.last,
           };
         },
-    enabled: gameUuid != null,
+    enabled: gameId != null,
     placeholderData: fallback,
     ...options,
   });

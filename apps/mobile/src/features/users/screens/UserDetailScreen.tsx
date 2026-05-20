@@ -377,7 +377,7 @@ export default function UserDetailScreen() {
         ) : (
           user.recent_post_its.map((p, idx) => (
             <View
-              key={p.uuid}
+              key={p.id}
               className={`py-2 ${idx < user.recent_post_its!.length - 1 ? 'border-b border-border' : ''}`}
             >
               <View className="flex-row items-center gap-2 mb-1 flex-wrap">

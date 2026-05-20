@@ -43,7 +43,6 @@ function toPostItBe(raw: Record<string, unknown>): PostItBe {
   };
   return {
     id: raw.id as number,
-    uuid: raw.uuid as string,
     userId: raw.userId as number,
     userUuid: raw.userUuid as string,
     userNickname: raw.userNickname as string,
@@ -72,22 +71,22 @@ export const postItsBeApi = {
     >(BASE, { params });
     return { ...data.data, content: data.data.content.map(toPostItBe) };
   },
-  detail: async (uuid: string): Promise<PostItBe> => {
+  detail: async (id: number): Promise<PostItBe> => {
     const { data } = await getApiClient().get<RspTemplate<Record<string, unknown>>>(
-      `${BASE}/${uuid}`
+      `${BASE}/${id}`
     );
     return toPostItBe(data.data);
   },
-  hide: async (uuid: string, reason?: string): Promise<PostItBe> => {
+  hide: async (id: number, reason?: string): Promise<PostItBe> => {
     const { data } = await getApiClient().post<RspTemplate<Record<string, unknown>>>(
-      `${BASE}/${uuid}/hide`,
+      `${BASE}/${id}/hide`,
       { reason }
     );
     return toPostItBe(data.data);
   },
-  restore: async (uuid: string): Promise<PostItBe> => {
+  restore: async (id: number): Promise<PostItBe> => {
     const { data } = await getApiClient().post<RspTemplate<Record<string, unknown>>>(
-      `${BASE}/${uuid}/restore`
+      `${BASE}/${id}/restore`
     );
     return toPostItBe(data.data);
   },

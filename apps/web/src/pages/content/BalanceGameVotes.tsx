@@ -36,14 +36,13 @@ const CHOICE_OPTIONS: { value: BalVoteChoice | 'ALL'; label: string }[] = [
 export default function BalanceGameVotesPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  // 라우트 path 가 :id 지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
-  const gameUuid = id ?? undefined
+  const gameId = id != null ? Number(id) : undefined
 
-  const { data: game } = useBalGameBeDetail(gameUuid)
+  const { data: game } = useBalGameBeDetail(gameId)
   const [choice, setChoice] = useState<BalVoteChoice | 'ALL'>('ALL')
   const [page, setPage] = useState(0)
 
-  const { data, isLoading } = useBalGameVotesBe(gameUuid, {
+  const { data, isLoading } = useBalGameVotesBe(gameId, {
     choice: choice === 'ALL' ? undefined : choice,
     page,
     size: 50,
@@ -53,7 +52,7 @@ export default function BalanceGameVotesPage() {
     <>
       <div className="flex items-center gap-2 mb-2">
         <button
-          onClick={() => gameUuid != null && navigate(`/balance/${gameUuid}`)}
+          onClick={() => gameId != null && navigate(`/balance/${gameId}`)}
           className="btn btn-ghost btn-sm"
         >
           <ArrowLeft size={14} /> 게임 상세

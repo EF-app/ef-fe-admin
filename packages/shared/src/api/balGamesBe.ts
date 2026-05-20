@@ -45,13 +45,11 @@ interface PageData<T> {
 
 /**
  * BE AdminBalCommentRspDto — flat (parentId 로 트리 그룹핑은 FE 가).
- * 주의: BE 의 parentId 는 부모 댓글의 **uuid (String)** 이고 id 는 PK(Long).
- * 그룹핑 시 자식의 parentId 와 부모의 uuid 로 매칭해야 함.
+ * parentId 는 부모 댓글의 PK(Long). 그룹핑 시 자식의 parentId 와 부모의 id 로 매칭.
  */
 interface AdminBalCommentBeDto {
   id: number;
-  uuid: string;
-  parentId: string | null;
+  parentId: number | null;
   content: string;
   authorUserId: number | null;
   authorUserNickname: string | null;
@@ -88,7 +86,6 @@ function toBalCommentReply(be: AdminBalCommentBeDto): BalCommentReplyBe {
   const nickname = be.displayNickname || be.authorUserNickname || '익명';
   return {
     id: be.id,
-    uuid: be.uuid,
     displayNick: nickname,
     letter: firstLetter(nickname),
     avColor: pickAvatarColor(be.authorUserId),
@@ -105,12 +102,11 @@ function toBalCommentReply(be: AdminBalCommentBeDto): BalCommentReplyBe {
   };
 }
 
-function toBalCommentTop(be: AdminBalCommentBeDto, gameUuid: string, replies: BalCommentReplyBe[]): BalCommentBe {
+function toBalCommentTop(be: AdminBalCommentBeDto, gameId: number, replies: BalCommentReplyBe[]): BalCommentBe {
   const nickname = be.displayNickname || be.authorUserNickname || '익명';
   return {
     id: be.id,
-    uuid: be.uuid,
-    gameUuid,
+    gameId,
     displayNick: nickname,
     letter: firstLetter(nickname),
     avColor: pickAvatarColor(be.authorUserId),
@@ -130,10 +126,10 @@ function toBalCommentTop(be: AdminBalCommentBeDto, gameUuid: string, replies: Ba
 
 /**
  * BE 의 flat 댓글 리스트를 (parentId 기준) FE 의 트리 구조로 재조립.
- * BE 의 parentId 는 부모 uuid(String) 이므로 부모의 uuid 로 매칭.
+ * BE 의 parentId 는 부모 댓글 id(Long) 이므로 부모의 id 로 매칭.
  */
-function buildCommentTree(flat: AdminBalCommentBeDto[], gameUuid: string): BalCommentBe[] {
-  const repliesByParent = new Map<string, BalCommentReplyBe[]>();
+function buildCommentTree(flat: AdminBalCommentBeDto[], gameId: number): BalCommentBe[] {
+  const repliesByParent = new Map<number, BalCommentReplyBe[]>();
   const topLevel: AdminBalCommentBeDto[] = [];
 
   for (const c of flat) {
@@ -146,7 +142,7 @@ function buildCommentTree(flat: AdminBalCommentBeDto[], gameUuid: string): BalCo
     }
   }
 
-  return topLevel.map((c) => toBalCommentTop(c, gameUuid, repliesByParent.get(c.uuid) ?? []));
+  return topLevel.map((c) => toBalCommentTop(c, gameId, repliesByParent.get(c.id) ?? []));
 }
 
 export const balGamesBeApi = {
@@ -190,9 +186,9 @@ export const balGamesBeApi = {
     return data.data;
   },
 
-  gameDetail: async (gameUuid: string): Promise<BalGameBe> => {
+  gameDetail: async (gameId: number): Promise<BalGameBe> => {
     const { data } = await getApiClient().get<RspTemplate<BalGameBe>>(
-      `${GAME_BASE}/${gameUuid}`
+      `${GAME_BASE}/${gameId}`
     );
     return data.data;
   },
@@ -202,25 +198,25 @@ export const balGamesBeApi = {
    * 트리 구조의 BalCommentBe[] 로 변환 반환.
    * FE 댓글 페이지는 페이징 안 함 → size 충분히 크게 (기본 200).
    */
-  gameComments: async (gameUuid: string, size = 200): Promise<BalCommentBe[]> => {
+  gameComments: async (gameId: number, size = 200): Promise<BalCommentBe[]> => {
     const { data } = await getApiClient().get<
       RspTemplate<PageData<AdminBalCommentBeDto>>
-    >(`${GAME_BASE}/${gameUuid}/comments`, {
+    >(`${GAME_BASE}/${gameId}/comments`, {
       params: { page: 0, size },
     });
-    return buildCommentTree(data.data.content, gameUuid);
+    return buildCommentTree(data.data.content, gameId);
   },
 
   /**
-   * 한 게임의 개별 투표자 목록 — GET /v1/admin/bal-game/{gameUuid}/votes
+   * 한 게임의 개별 투표자 목록 — GET /v1/admin/bal-game/{gameId}/votes
    * choice 옵션, default size=50. Spring Page<AdminBalVoteRspDto> 반환.
    */
   gameVotes: async (
-    gameUuid: string,
+    gameId: number,
     params?: AdminBalVoteListParams
   ): Promise<PageData<AdminBalVote>> => {
     const { data } = await getApiClient().get<RspTemplate<PageData<AdminBalVote>>>(
-      `${GAME_BASE}/${gameUuid}/votes`,
+      `${GAME_BASE}/${gameId}/votes`,
       { params: { page: 0, size: 50, ...params } }
     );
     return data.data;
@@ -235,11 +231,11 @@ export const balGamesBeApi = {
   },
 
   updateGame: async (
-    gameUuid: string,
+    gameId: number,
     payload: BalGameUpdateRequest
   ): Promise<BalGameBe> => {
     const { data } = await getApiClient().patch<RspTemplate<BalGameBe>>(
-      `${GAME_BASE}/${gameUuid}`,
+      `${GAME_BASE}/${gameId}`,
       payload
     );
     return data.data;

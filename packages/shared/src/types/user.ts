@@ -172,7 +172,7 @@ export interface UserBalGameComment {
 }
 
 export interface UserPostItSummary {
-  uuid: string;
+  id: number;
   category_code: string;
   content_preview: string;
   is_hidden: boolean;

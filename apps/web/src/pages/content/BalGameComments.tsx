@@ -52,11 +52,10 @@ const AV_COLOR_MAP: Record<CommentAvatarColor, { bg: string; color: string }> = 
 export default function BalGameCommentsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  // 라우트 path 가 :id 지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
-  const gameUuid = id ?? undefined
+  const gameId = id != null ? Number(id) : undefined
 
-  const { data: game } = useBalGameBeDetail(gameUuid)
-  const { data: comments, isLoading } = useBalGameCommentsBe(gameUuid)
+  const { data: game } = useBalGameBeDetail(gameId)
+  const { data: comments, isLoading } = useBalGameCommentsBe(gameId)
 
   const [suspendTarget, setSuspendTarget] = useState<{
     userUuid: string
@@ -241,7 +240,7 @@ function CommentRow({
 }) {
   return (
     <div className="py-3.5">
-      <CommentBody item={comment} isReply={false} onSuspend={onSuspend} />
+      <CommentBody item={comment} gameId={comment.gameId} isReply={false} onSuspend={onSuspend} />
       {comment.replies.length > 0 && (
         <div
           className="ml-[42px] mt-3 pl-3"
@@ -251,6 +250,7 @@ function CommentRow({
             <CommentBody
               key={r.id}
               item={r}
+              gameId={comment.gameId}
               isReply={true}
               onSuspend={() => {
                 /* 답글도 동일 부모 흐름 — 부모에서 처리해도 됨, 여기선 inline 호출 */
@@ -267,10 +267,12 @@ function CommentRow({
 
 function CommentBody({
   item,
+  gameId,
   isReply,
   onSuspend,
 }: {
   item: BalCommentBe | BalCommentReplyBe
+  gameId: number
   isReply: boolean
   onSuspend: () => void
   replyParentId?: number
@@ -290,10 +292,7 @@ function CommentBody({
     } else {
       if (!confirm('이 댓글을 숨김 처리할까요?')) return
     }
-    // gameUuid 추출 — 댓글에 직접 들고 있으므로 사용. 답글은 replies 의 parent gameUuid 가 동일.
-    const gameUuid =
-      'gameUuid' in item ? (item as { gameUuid: string }).gameUuid : ''
-    hideMutation.mutate({ gameUuid, commentUuid: item.uuid })
+    hideMutation.mutate({ gameId, commentId: item.id })
   }
 
   return (

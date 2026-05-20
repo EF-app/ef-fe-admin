@@ -913,7 +913,7 @@ function PostItList({
         ) : (
           <div className="divide-y divide-border">
             {pager.slice.map((p) => (
-              <div key={p.uuid} className="p-3 bg-surface">
+              <div key={p.id} className="p-3 bg-surface">
                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
                   <Badge tone="point">
                     {POST_IT_CATEGORY_LABEL[p.category_code as PostItCategory] ??
@@ -939,7 +939,7 @@ function PostItList({
                           disabled={hideMutation.isPending}
                           onClick={() => {
                             if (confirm('이 포스트잇을 숨김 처리할까요?')) {
-                              hideMutation.mutate({ uuid: p.uuid })
+                              hideMutation.mutate({ id: p.id })
                             }
                           }}
                         >
@@ -951,7 +951,7 @@ function PostItList({
                         className="btn btn-secondary btn-sm"
                         onClick={() =>
                           onSuspend(
-                            `포스트잇 ${p.uuid} (${POST_IT_CATEGORY_LABEL[p.category_code as PostItCategory] ?? p.category_code}) — `
+                            `포스트잇 #${p.id} (${POST_IT_CATEGORY_LABEL[p.category_code as PostItCategory] ?? p.category_code}) — `
                           )
                         }
                       >

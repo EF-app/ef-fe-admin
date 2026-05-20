@@ -74,8 +74,6 @@ export interface BalApplyDecisionRequest {
 /** /v1/admin/bal-game AdminBalGameSummaryRspDto */
 export interface BalGameBeSummary {
   id: number;
-  /** BE 외부 노출 식별자 (uuid). admin API path 호출에 사용. */
-  uuid: string;
   optionA: string;
   optionADesc: string | null;
   optionB: string;
@@ -119,8 +117,6 @@ export interface AdminBalVoteStats {
 /** AdminBalGameDetailRspDto */
 export interface BalGameBe {
   id: number;
-  /** BE 외부 노출 식별자 (uuid). admin API path 호출에 사용. */
-  uuid: string;
   optionA: string;
   optionADesc: string | null;
   optionAEmoji: string | null;

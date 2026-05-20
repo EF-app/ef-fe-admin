@@ -10,8 +10,6 @@ export type CommentAvatarColor = 'purple' | 'blue' | 'green' | 'amber' | 'pink';
 
 export interface BalCommentReplyBe {
   id: number;
-  /** BE 외부 노출 식별자 (uuid). API path 호출에 사용. */
-  uuid: string;
   /** 표시용 닉네임 (BE 가 랜덤 부여, 익명에 가까운 동물 이름 등) */
   displayNick: string;
   letter: string;
@@ -34,10 +32,8 @@ export interface BalCommentReplyBe {
 
 export interface BalCommentBe {
   id: number;
-  /** BE 외부 노출 식별자 (uuid). API path 호출에 사용. */
-  uuid: string;
-  /** 부모 게임의 uuid (API path 호출에 사용) */
-  gameUuid: string;
+  /** 부모 게임 id (API path 호출에 사용) */
+  gameId: number;
 
   displayNick: string;
   letter: string;

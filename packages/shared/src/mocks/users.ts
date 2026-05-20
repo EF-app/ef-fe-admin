@@ -252,7 +252,7 @@ export const mockUserDetail: UserDetail = {
   ],
   recent_post_its: [
     {
-      uuid: 'post-mine-1',
+      id: 7001,
       category_code: 'DAILY',
       content_preview: '오늘 출근길에 본 노을이 너무 예뻤어요 🌅',
       is_hidden: false,
@@ -262,7 +262,7 @@ export const mockUserDetail: UserDetail = {
       create_time: '2026-05-03T08:00:00.000Z',
     },
     {
-      uuid: 'post-mine-2',
+      id: 7002,
       category_code: 'INFO',
       content_preview: '한강 산책 코스 추천해주실 분?',
       is_hidden: false,
@@ -401,7 +401,7 @@ export const mockUserDetailSuspended: UserDetail = {
   ],
   recent_post_its: [
     {
-      uuid: 'post-abc-1',
+      id: 7003,
       category_code: 'WORRY',
       content_preview: '요즘 계속 무기력해요. 다들 어떻게 극복하세요?',
       is_hidden: true,

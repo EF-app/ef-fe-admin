@@ -46,15 +46,17 @@ function groupKey(g: ReportGroup) {
  */
 function getContentLink(g: ReportGroup): { href: string; label: string } | null {
   if (g.target_type === 'PROFILE') {
-    const userId = g.target_user_id ?? g.target_id
-    return { href: `/users/${userId}`, label: '프로필 보기' }
+    // BE enrich 의 target_user_uuid 사용 (admin /users/{uuid} 라우트 정합)
+    const userUuid = g.target_user_uuid ?? g.reports.find((r) => r.target_user_uuid)?.target_user_uuid
+    return userUuid ? { href: `/users/${userUuid}`, label: '프로필 보기' } : null
   }
   if (g.target_type === 'POST_IT')
     return { href: '/post-its', label: '포스트잇 목록' }
   if (g.target_type === 'BAL_COMMENT') {
+    // BAL_COMMENT 신고의 부모 게임 id 사용
     const firstWithGame = g.reports.find((r) => r.bal_game_id != null)
     const gameId = firstWithGame?.bal_game_id
-    return gameId
+    return gameId != null
       ? { href: `/balance/${gameId}/comments`, label: '게임 댓글 보기' }
       : { href: '/balance', label: '게임 목록' }
   }
@@ -64,7 +66,9 @@ function getContentLink(g: ReportGroup): { href: string; label: string } | null 
 /** PROFILE 외 타입에서 따로 "작성자 프로필" 점프가 가능한 경우. */
 function getTargetUserLink(g: ReportGroup): string | null {
   if (g.target_type === 'PROFILE') return null
-  return g.target_user_id != null ? `/users/${g.target_user_id}` : null
+  // BE enrich 의 target_user_uuid 사용
+  const userUuid = g.target_user_uuid ?? g.reports.find((r) => r.target_user_uuid)?.target_user_uuid
+  return userUuid ? `/users/${userUuid}` : null
 }
 
 /**

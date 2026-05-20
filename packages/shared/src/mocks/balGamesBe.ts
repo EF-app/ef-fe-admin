@@ -87,7 +87,6 @@ export const mockBalAppliesBe: BalApplyBe[] = [
 export const mockBalGamesBe: BalGameBe[] = [
   {
     id: 6001,
-    uuid: "balgame-mock-uuid-6001",
     optionA: '치킨',
     optionADesc: '바삭한 후라이드 치킨 한 마리',
     optionAEmoji: '🍗',
@@ -111,7 +110,6 @@ export const mockBalGamesBe: BalGameBe[] = [
   },
   {
     id: 6002,
-    uuid: "balgame-mock-uuid-6002",
     optionA: '여름 휴가 산',
     optionADesc: '시원한 계곡, 그늘진 등산로',
     optionAEmoji: '⛰️',
@@ -135,7 +133,6 @@ export const mockBalGamesBe: BalGameBe[] = [
   },
   {
     id: 6003,
-    uuid: "balgame-mock-uuid-6003",
     optionA: '돈 많은데 친구 없음',
     optionADesc: '재산 100억, 친구 0명',
     optionAEmoji: '💰',
@@ -159,7 +156,6 @@ export const mockBalGamesBe: BalGameBe[] = [
   },
   {
     id: 6004,
-    uuid: "balgame-mock-uuid-6004",
     optionA: '시간 멈추기',
     optionADesc: '하루 24시간 동안 시간 정지 가능',
     optionAEmoji: '⏳',
@@ -183,7 +179,6 @@ export const mockBalGamesBe: BalGameBe[] = [
   },
   {
     id: 6005,
-    uuid: "balgame-mock-uuid-6005",
     optionA: '연인의 SNS 비밀번호',
     optionADesc: '알려달라고 요구',
     optionAEmoji: '🔐',
@@ -210,7 +205,6 @@ export const mockBalGamesBe: BalGameBe[] = [
 function toSummary(g: BalGameBe): BalGameBeSummary {
   return {
     id: g.id,
-    uuid: g.uuid,
     optionA: g.optionA,
     optionADesc: g.optionADesc,
     optionB: g.optionB,

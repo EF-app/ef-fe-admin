@@ -30,7 +30,6 @@ function buildReply(
   const p = nickPool(authorIdx)
   return {
     id,
-    uuid: `balcomment-mock-uuid-${id}`,
     displayNick: p.displayNick,
     letter: p.letter,
     avColor: p.avColor,
@@ -66,8 +65,7 @@ function buildComment(
   const p = nickPool(authorIdx)
   return {
     id,
-    uuid: `balcomment-mock-uuid-${id}`,
-    gameUuid: `balgame-mock-uuid-${gameId}`,
+    gameId,
     displayNick: p.displayNick,
     letter: p.letter,
     avColor: p.avColor,
@@ -87,10 +85,10 @@ function buildComment(
   }
 }
 
-/** gameUuid → comment[] — mock key 는 게임 uuid 기준. */
-export const mockBalCommentsByGame: Record<string, BalCommentBe[]> = {
+/** gameId → comment[] — mock key 는 게임 id(PK) 기준. */
+export const mockBalCommentsByGame: Record<number, BalCommentBe[]> = {
   // 게임 6001 (치킨 vs 피자, PUBLISHED, comments: 86)
-  "balgame-mock-uuid-6001": [
+  6001: [
     buildComment(70101, 6001, 0, '피자 100%! 마르게리타 한 판이면 그날 하루가 완성됨 🍕', 2, {
       likes: 18,
       voteChoice: 'B',
@@ -120,7 +118,7 @@ export const mockBalCommentsByGame: Record<string, BalCommentBe[]> = {
     }),
   ],
   // 게임 6004 (시간멈추기 vs 순간이동, PUBLISHED, comments: 54)
-  "balgame-mock-uuid-6004": [
+  6004: [
     buildComment(70201, 6004, 3, '순간이동은 진짜 출퇴근 안 해도 되니까 이긴다', 4, {
       likes: 22,
       voteChoice: 'B',
@@ -139,7 +137,7 @@ export const mockBalCommentsByGame: Record<string, BalCommentBe[]> = {
     }),
   ],
   // 게임 6005 (연인의 SNS, ARCHIVED, comments: 211 — 일부만)
-  "balgame-mock-uuid-6005": [
+  6005: [
     buildComment(70301, 6005, 2, '몰라도 상관없음. 신뢰 문제임', 24 * 30, {
       likes: 88,
       voteChoice: 'B',
@@ -151,7 +149,7 @@ export const mockBalCommentsByGame: Record<string, BalCommentBe[]> = {
   ],
 }
 
-/** 단일 게임의 댓글 페이지 (admin 화면용) — gameUuid 기준 */
-export function getMockBalComments(gameUuid: string): BalCommentBe[] {
-  return mockBalCommentsByGame[gameUuid] ?? []
+/** 단일 게임의 댓글 페이지 (admin 화면용) — gameId 기준 */
+export function getMockBalComments(gameId: number): BalCommentBe[] {
+  return mockBalCommentsByGame[gameId] ?? []
 }

@@ -34,7 +34,6 @@ export const POST_IT_COLOR_HEX: Record<PostItColor, string> = {
 
 export interface PostItBe {
   id: number;
-  uuid: string;
   userId: number;
   userUuid: string;
   userNickname: string;

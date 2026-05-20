@@ -37,14 +37,13 @@ export default function BalanceGameEditorPage() {
   const navigate = useNavigate()
 
   const isEdit = Boolean(idParam)
-  // 라우트 path 가 :id 지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
-  const gameUuid = idParam ?? undefined
+  const gameId = idParam != null ? Number(idParam) : undefined
 
   const fromApply = searchParams.get('fromApply')
   const fromApplyId = fromApply ? Number(fromApply) : undefined
   const isFromApply = !isEdit && fromApplyId != null && !Number.isNaN(fromApplyId)
 
-  const { data: existing, isLoading: existingLoading } = useBalGameBeDetail(gameUuid)
+  const { data: existing, isLoading: existingLoading } = useBalGameBeDetail(gameId)
   const { data: applySource, isLoading: applyLoading } = useBalApplyBeDetail(
     isFromApply ? fromApplyId : undefined
   )
@@ -208,7 +207,7 @@ export default function BalanceGameEditorPage() {
   // 게시 중/숨김 게임에서 일정(예약·자동종료) 만 따로 저장.
   // 내용 변경은 잠겨도 일정은 운영 중에 조정해야 하는 케이스 (자동 종료 시각 추가 등).
   const handleSaveSchedule = () => {
-    if (!isEdit || gameUuid == null) return
+    if (!isEdit || gameId == null) return
     setError(null)
     const scheduledIso = hasScheduleInputs
       ? buildIso(scheduledDate, scheduledHour, scheduledMinute)
@@ -228,7 +227,7 @@ export default function BalanceGameEditorPage() {
       return
     }
     updateMutation.mutate({
-      gameUuid,
+      gameId: gameId!,
       payload: {
         scheduledAt: scheduledIso,
         scheduledEndAt: endIso,
@@ -238,9 +237,9 @@ export default function BalanceGameEditorPage() {
 
   const executeSubmit = () => {
     if (!pendingPayload) return
-    if (isEdit && gameUuid != null) {
+    if (isEdit && gameId != null) {
       updateMutation.mutate(
-        { gameUuid, payload: pendingPayload },
+        { gameId, payload: pendingPayload },
         { onSettled: () => setPendingPayload(null) }
       )
     } else {
@@ -561,7 +560,7 @@ export default function BalanceGameEditorPage() {
         />
       )}
 
-      {pendingStatusChange && gameUuid != null && (
+      {pendingStatusChange && gameId != null && (
         <StatusChangeDialog
           target={pendingStatusChange}
           currentLabel={existing ? BAL_GAME_BE_STATUS_LABEL[existing.status] : ''}
@@ -569,7 +568,7 @@ export default function BalanceGameEditorPage() {
           onCancel={() => setPendingStatusChange(null)}
           onConfirm={() => {
             updateMutation.mutate(
-              { gameUuid, payload: { status: pendingStatusChange } },
+              { gameId, payload: { status: pendingStatusChange } },
               { onSettled: () => setPendingStatusChange(null) }
             )
           }}

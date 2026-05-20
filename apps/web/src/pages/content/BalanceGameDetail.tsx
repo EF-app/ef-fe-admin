@@ -28,10 +28,9 @@ import EmptyState from '../../components/ui/EmptyState'
 export default function BalanceGameDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  // 라우트 path 가 :id 로 정의되어 있지만 값은 BE 의 uuid (관리자도 uuid 정책 통일).
-  const gameUuid = id ?? undefined
+  const gameId = id != null ? Number(id) : undefined
 
-  const { data: game, isLoading } = useBalGameBeDetail(gameUuid)
+  const { data: game, isLoading } = useBalGameBeDetail(gameId)
 
   if (isLoading || !game) {
     return (
@@ -52,13 +51,13 @@ export default function BalanceGameDetailPage() {
         <div className="flex items-center gap-2">
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => navigate(`/balance/${game.uuid}/edit`)}
+            onClick={() => navigate(`/balance/${game.id}/edit`)}
           >
             <FileEdit size={13} /> 수정
           </button>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => navigate(`/balance/${game.uuid}/votes`)}
+            onClick={() => navigate(`/balance/${game.id}/votes`)}
             disabled={total === 0}
             title={total === 0 ? '투표가 아직 없습니다.' : undefined}
           >
@@ -66,7 +65,7 @@ export default function BalanceGameDetailPage() {
           </button>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => navigate(`/balance/${game.uuid}/comments`)}
+            onClick={() => navigate(`/balance/${game.id}/comments`)}
           >
             <MessageSquare size={13} /> 댓글 보기 ({formatNumber(game.commentCount)})
           </button>

@@ -7,7 +7,6 @@ import type { PostItBe } from '../types/postItBe';
 export const mockPostItsBe: PostItBe[] = [
   {
     id: 8001,
-    uuid: 'pi-8001',
     userId: 103,
     userUuid: 'u-103',
     userNickname: '라임소다',
@@ -30,7 +29,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8002,
-    uuid: 'pi-8002',
     userId: 101,
     userUuid: 'u-101',
     userNickname: '달빛여우',
@@ -52,7 +50,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8003,
-    uuid: 'pi-8003',
     userId: 105,
     userUuid: 'u-105',
     userNickname: '봄바람솔솔',
@@ -74,7 +71,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8004,
-    uuid: 'pi-8004',
     userId: 102,
     userUuid: 'u-102',
     userNickname: '별빛조각',
@@ -97,7 +93,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8005,
-    uuid: 'pi-8005',
     userId: 104,
     userUuid: 'u-104',
     userNickname: '차가운바람',
@@ -119,7 +114,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8006,
-    uuid: 'pi-8006',
     userId: 105,
     userUuid: 'u-105',
     userNickname: '봄바람솔솔',
@@ -141,7 +135,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8007,
-    uuid: 'pi-8007',
     userId: 110,
     userUuid: 'u-110',
     userNickname: '단풍캠퍼',
@@ -163,7 +156,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8008,
-    uuid: 'pi-8008',
     userId: 109,
     userUuid: 'u-109',
     userNickname: '겨울나라',
@@ -186,7 +178,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8009,
-    uuid: 'pi-8009',
     userId: 102,
     userUuid: 'u-102',
     userNickname: '별빛조각',
@@ -208,7 +199,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8010,
-    uuid: 'pi-8010',
     userId: 105,
     userUuid: 'u-105',
     userNickname: '봄바람솔솔',
@@ -230,7 +220,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8011,
-    uuid: 'pi-8011',
     userId: 104,
     userUuid: 'u-104',
     userNickname: '차가운바람',
@@ -252,7 +241,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8012,
-    uuid: 'pi-8012',
     userId: 101,
     userUuid: 'u-101',
     userNickname: '달빛여우',
@@ -274,7 +262,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8013,
-    uuid: 'pi-8013',
     userId: 109,
     userUuid: 'u-109',
     userNickname: '겨울나라',
@@ -296,7 +283,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8014,
-    uuid: 'pi-8014',
     userId: 110,
     userUuid: 'u-110',
     userNickname: '단풍캠퍼',
@@ -318,7 +304,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8015,
-    uuid: 'pi-8015',
     userId: 103,
     userUuid: 'u-103',
     userNickname: '라임소다',
@@ -340,7 +325,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8016,
-    uuid: 'pi-8016',
     userId: 102,
     userUuid: 'u-102',
     userNickname: '별빛조각',
@@ -362,7 +346,6 @@ export const mockPostItsBe: PostItBe[] = [
   },
   {
     id: 8017,
-    uuid: 'pi-8017',
     userId: 999,
     userUuid: 'u-999',
     userNickname: '문제계정',

@@ -127,7 +127,7 @@ export default function PostItsPage() {
         // 카드 자체 크기는 그대로 두고, gap 만 크게 잡아 여백을 확보.
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8 xl:gap-10">
           {data.content.map((p) => (
-            <PostItCard key={p.uuid} post={p} onClick={() => setSelected(p)} />
+            <PostItCard key={p.id} post={p} onClick={() => setSelected(p)} />
           ))}
         </div>
       )}
@@ -438,11 +438,11 @@ function PostItDetailModal({
             {post.content}
           </div>
 
-          {/* 메타 — 1행: UUID/작성/만료, 2행: 신고/좋아요/채팅/색상 */}
+          {/* 메타 — 1행: ID/작성/만료, 2행: 신고/좋아요/채팅/색상 */}
           <div className="bg-surface-alt rounded-md p-3 space-y-2.5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px]">
-              <Field label="UUID">
-                <span className="font-mono text-[10.5px] break-all">{post.uuid}</span>
+              <Field label="ID">
+                <span className="font-mono text-[10.5px] break-all">{post.id}</span>
               </Field>
               <Field label="작성 시각">{formatDateTime(post.createTime)}</Field>
               <Field label="만료 시각">{formatDateTime(post.expiresAt)}</Field>
@@ -495,7 +495,7 @@ function PostItDetailModal({
                       disabled={hideMutation.isPending}
                       onClick={() =>
                         hideMutation.mutate({
-                          uuid: post.uuid,
+                          id: post.id,
                           reason: hideReason || undefined,
                         })
                       }
@@ -522,7 +522,7 @@ function PostItDetailModal({
                     <button
                       className="btn btn-primary btn-sm"
                       disabled={restoreMutation.isPending}
-                      onClick={() => restoreMutation.mutate(post.uuid)}
+                      onClick={() => restoreMutation.mutate(post.id)}
                     >
                       해제 확정
                     </button>

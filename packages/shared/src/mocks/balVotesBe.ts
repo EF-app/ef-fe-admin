@@ -114,12 +114,10 @@ export interface MockBalVotePage {
 }
 
 export function buildMockBalVotePage(
-  gameUuid: string,
+  gameId: number,
   params: AdminBalVoteListParams = {}
 ): MockBalVotePage {
-  // gameUuid 에서 numeric 시드 추출 (mock 풀 생성용 — BE 모드에서는 사용 안 됨)
-  const seed = (gameUuid.match(/(\d+)/)?.[1] ?? '0');
-  const pool = buildPoolForGame(Number(seed));
+  const pool = buildPoolForGame(gameId);
   const filtered = params.choice
     ? pool.filter((v) => v.choice === params.choice)
     : pool;

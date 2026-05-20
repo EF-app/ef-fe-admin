@@ -47,8 +47,10 @@ export interface Report {
   /** 표시용 denormalized — BE enrich 필드 */
   target_preview?: string;
   target_user_id?: number;
+  /** target user 의 외부 식별자 — admin FE 가 /users/{uuid} navigate 용 */
+  target_user_uuid?: string | null;
   target_user_nickname?: string;
-  /** BAL_COMMENT 일 때 부모 밸런스게임 id — 댓글 페이지 점프용 */
+  /** BAL_COMMENT 일 때 부모 밸런스게임 id — admin FE 가 /balance/{id}/comments navigate 용 */
   bal_game_id?: number;
 
   create_user?: number | null;
@@ -86,6 +88,7 @@ export interface ReportGroup {
   reports: Report[];
 
   target_user_id?: number;
+  target_user_uuid?: string | null;
   target_user_nickname?: string;
   target_preview?: string;
 }
