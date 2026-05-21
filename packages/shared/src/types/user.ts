@@ -3,9 +3,6 @@ import type {
   SuspensionType,
   ProfileStatus,
   MatchPurpose,
-  DrinkingLevel,
-  SmokingLevel,
-  TattooLevel,
 } from '../constants/enums';
 
 export interface User {
@@ -13,7 +10,6 @@ export interface User {
   uuid: string;
   login_id: string;
   phone: string;
-  scode: string;
   nickname: string;
   nickname_changed_at: string | null;
   age: number;
@@ -21,7 +17,8 @@ export interface User {
   is_withdraw: boolean;
   withdraw_date: string | null;
   status: UserStatus;
-  area_id: number | null;
+  /** 지역명 조합 문자열 ("서울특별시 강남구"). 미입력 시 null */
+  area: string | null;
   last_login_time: string | null;
   verified_birth_date: string | null;
   identity_verified_at: string | null;
@@ -49,10 +46,12 @@ export interface UserProfile {
   match_purpose: MatchPurpose;
   bio_message: string | null;
   mbti: string | null;
-  drinking: DrinkingLevel | null;
-  smoking: SmokingLevel | null;
-  tattoo: TattooLevel | null;
-  height: number | null;
+  /** code_personal 라벨 텍스트 ("가끔 마심" 등). 미입력 시 null */
+  drinking: string | null;
+  smoking: string | null;
+  tattoo: string | null;
+  /** code_personal 키 라벨 ("166~170" 등). 미입력 시 null */
+  height: string | null;
   hair_style: string | null;
   body_type: string | null;
   important_factor: string | null;

@@ -9,6 +9,9 @@ import { QUERY_KEYS } from '../constants';
 import { authApi } from '../api/auth';
 import { dashboardApi } from '../api/dashboard';
 import { usersApi } from '../api/users';
+import { userBeApi } from '../api/userBe';
+import { balCommentBeApi } from '../api/balCommentBe';
+import { blockBeApi } from '../api/blockBe';
 import { reportsApi } from '../api/reports';
 import { reportsBeApi } from '../api/reportsBe';
 import { paymentsApi } from '../api/payments';
@@ -18,7 +21,7 @@ import { balGamesApi } from '../api/balGames';
 import { auditLogsApi, AuditLogListParams } from '../api/auditLogs';
 import { suspensionLogsApi } from '../api/suspensionLogs';
 import { postItsApi } from '../api/postIts';
-import { feedbackApi } from '../api/feedback';
+import { feedbackBeApi } from '../api/feedbackBe';
 import type {
   AdminAccount,
   LoginRequest,
@@ -29,6 +32,7 @@ import type {
   User,
   UserDetail,
   UserListParams,
+  UserBalGameComment,
   SuspendUserRequest,
   UserSuspension,
 } from '../types/user';
@@ -240,6 +244,7 @@ const MOCK_LOGIN_ACCOUNTS: Record<
 
 export function useLoginMutation(options?: MutationOpts<LoginResponse, LoginRequest>) {
   return useMutation<LoginResponse, NormalizedError, LoginRequest>({
+    ...options,
     // BE 연결됨. VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
       ? (payload) => {
@@ -278,7 +283,6 @@ export function useLoginMutation(options?: MutationOpts<LoginResponse, LoginRequ
             expires_in: 3600,
           };
         },
-    ...options,
   });
 }
 
@@ -331,31 +335,48 @@ export function useRevenueChart(days = 30, options?: QueryOpts<ChartPoint[]>) {
 export function useUsers(params?: UserListParams, options?: QueryOpts<PageResponse<User>>) {
   return useQuery<PageResponse<User>, NormalizedError>({
     queryKey: QUERY_KEYS.USERS(params),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true ? mocked(mockUsersPage) : () => usersApi.list(params),
+    // BE 연결됨 (AdminUserController GET /v1/admin/user). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode() ? mocked(mockUsersPage) : () => userBeApi.getUser(params),
     placeholderData: mockUsersPage,
     ...options,
   });
 }
 
-function pickMockUserDetail(uuid: string | number | undefined): UserDetail {
-  if (uuid === 'u-103' || uuid === 103) return mockUserDetailSuspended;
-  if (uuid === 'u-104' || uuid === 104) return mockUserDetailWithdrawing;
+function pickMockUserDetail(id: string | number | undefined): UserDetail {
+  if (id === 'u-103' || id === 103) return mockUserDetailSuspended;
+  if (id === 'u-104' || id === 104) return mockUserDetailWithdrawing;
   return mockUserDetail;
 }
 
 export function useUserDetail(
-  uuid: string | number | undefined,
+  id: number | undefined,
   options?: QueryOpts<UserDetail>
 ) {
   return useQuery<UserDetail, NormalizedError>({
-    queryKey: QUERY_KEYS.USER_DETAIL(uuid ?? ''),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true
-      ? mocked(pickMockUserDetail(uuid))
-      : () => usersApi.detail(uuid!),
-    enabled: !!uuid,
-    placeholderData: pickMockUserDetail(uuid),
+    queryKey: QUERY_KEYS.USER_DETAIL(id ?? ''),
+    // BE 연결됨 (AdminUserController GET /v1/admin/user/{id}). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode()
+      ? mocked(pickMockUserDetail(id))
+      : () => userBeApi.getUserDetail(id!),
+    enabled: id != null,
+    placeholderData: pickMockUserDetail(id),
+    ...options,
+  });
+}
+
+/** 유저가 작성한 밸런스 게임 댓글 — 유저 상세 "작성한 글" 탭. (/v1/admin/bal-comment) */
+export function useUserBalComments(
+  userId: number | undefined,
+  options?: QueryOpts<UserBalGameComment[]>
+) {
+  const fallback = pickMockUserDetail(userId).recent_bal_comments ?? [];
+  return useQuery<UserBalGameComment[], NormalizedError>({
+    queryKey: ['user-bal-comments', userId],
+    queryFn: isMockMode()
+      ? mocked(fallback)
+      : () => balCommentBeApi.getUserBalComments(userId!),
+    enabled: userId != null,
+    placeholderData: fallback,
     ...options,
   });
 }
@@ -369,6 +390,7 @@ export function useSuspendUserMutation(
     NormalizedError,
     { uuid: string | number; payload: SuspendUserRequest }
   >({
+    ...options,
     mutationFn: ({ uuid, payload }) => usersApi.suspend(uuid, payload),
     onSuccess: (...args) => {
       const [, vars] = args;
@@ -376,7 +398,6 @@ export function useSuspendUserMutation(
       qc.invalidateQueries({ queryKey: ['users'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -438,13 +459,13 @@ export function useProcessReportMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<Report, NormalizedError, { id: number; payload: ProcessReportRequest }>({
+    ...options,
     mutationFn: ({ id, payload }) => reportsApi.process(id, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['reports'] });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_ALERTS });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -453,13 +474,13 @@ export function useDismissReportMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<Report, NormalizedError, { id: number; reason?: string }>({
+    ...options,
     mutationFn: ({ id, reason }) => reportsApi.dismiss(id, reason),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['reports'] });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_ALERTS });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -497,13 +518,13 @@ export function useRefundMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PaymentLog, NormalizedError, { id: number; payload: RefundRequest }>({
+    ...options,
     mutationFn: ({ id, payload }) => paymentsApi.refund(id, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['payments'] });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_ALERTS });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -526,12 +547,12 @@ export function useProfileReviews(
 export function useApproveProfileMutation(options?: MutationOpts<void, string>) {
   const qc = useQueryClient();
   return useMutation<void, NormalizedError, string>({
+    ...options,
     mutationFn: (userUuid) => profileReviewsApi.approve(userUuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['profile-reviews'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -540,12 +561,12 @@ export function useRejectProfileMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<void, NormalizedError, { userUuid: string; reason: string }>({
+    ...options,
     mutationFn: ({ userUuid, reason }) => profileReviewsApi.reject(userUuid, reason),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['profile-reviews'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -566,24 +587,24 @@ export function useNotices(
 export function useCreateNoticeMutation(options?: MutationOpts<Notice, CreateNoticeRequest>) {
   const qc = useQueryClient();
   return useMutation<Notice, NormalizedError, CreateNoticeRequest>({
+    ...options,
     mutationFn: noticesApi.create,
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['notices'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useSendNoticeMutation(options?: MutationOpts<Notice, string>) {
   const qc = useQueryClient();
   return useMutation<Notice, NormalizedError, string>({
+    ...options,
     mutationFn: (uuid) => noticesApi.send(uuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['notices'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -621,13 +642,13 @@ export function useBalGames(
 export function useApproveBalApplyMutation(options?: MutationOpts<BalGame, number>) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, number>({
+    ...options,
     mutationFn: (id) => balGamesApi.approveApply(id),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-applies'] });
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -640,36 +661,36 @@ export function useRejectBalApplyMutation(
     NormalizedError,
     { id: number; payload: RejectBalApplyRequest }
   >({
+    ...options,
     mutationFn: ({ id, payload }) => balGamesApi.rejectApply(id, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-applies'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useHideBalGameMutation(options?: MutationOpts<BalGame, string>) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, string>({
+    ...options,
     mutationFn: (uuid) => balGamesApi.hideGame(uuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function usePublishBalGameMutation(options?: MutationOpts<BalGame, string>) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, string>({
+    ...options,
     mutationFn: (uuid) => balGamesApi.publishGame(uuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -678,36 +699,36 @@ export function useScheduleBalGameMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, { uuid: string; scheduled_at: string }>({
+    ...options,
     mutationFn: ({ uuid, scheduled_at }) => balGamesApi.scheduleGame(uuid, scheduled_at),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useArchiveBalGameMutation(options?: MutationOpts<BalGame, string>) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, string>({
+    ...options,
     mutationFn: (uuid) => balGamesApi.archiveGame(uuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useCreateBalGameMutation(options?: MutationOpts<BalGame, BalGameUpsertRequest>) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, BalGameUpsertRequest>({
+    ...options,
     mutationFn: (payload) => balGamesApi.createGame(payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -716,12 +737,12 @@ export function useUpdateBalGameMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BalGame, NormalizedError, { uuid: string; payload: BalGameUpsertRequest }>({
+    ...options,
     mutationFn: ({ uuid, payload }) => balGamesApi.updateGame(uuid, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['bal-games'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -792,13 +813,13 @@ export function useLiftSuspensionMutation(
     NormalizedError,
     { id: number; payload: LiftSuspensionRequest }
   >({
+    ...options,
     mutationFn: ({ id, payload }) => suspensionLogsApi.lift(id, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['suspension-logs'] });
       qc.invalidateQueries({ queryKey: ['users'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -808,6 +829,7 @@ export function useCancelWithdrawalMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<UserDetail, NormalizedError, { uuid: string | number; reason?: string }>({
+    ...options,
     mutationFn: ({ uuid }) => {
       // mock: pickMockUserDetail 의 대상 객체를 직접 변형
       const target =
@@ -827,7 +849,6 @@ export function useCancelWithdrawalMutation(
       qc.invalidateQueries({ queryKey: ['users'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -865,24 +886,24 @@ export function useHidePostItMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PostIt, NormalizedError, { uuid: string; reason?: string }>({
+    ...options,
     mutationFn: ({ uuid, reason }) => postItsApi.hide(uuid, reason),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['post-its'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useRestorePostItMutation(options?: MutationOpts<PostIt, string>) {
   const qc = useQueryClient();
   return useMutation<PostIt, NormalizedError, string>({
+    ...options,
     mutationFn: (uuid) => postItsApi.restore(uuid),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['post-its'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -893,8 +914,8 @@ export function useFeedbacks(
 ) {
   return useQuery<PageResponse<Feedback>, NormalizedError>({
     queryKey: QUERY_KEYS.FEEDBACKS(params),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true ? mocked(mockFeedbacksPage) : () => feedbackApi.list(params),
+    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedback). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode() ? mocked(mockFeedbacksPage) : () => feedbackBeApi.list(params),
     placeholderData: mockFeedbacksPage,
     ...options,
   });
@@ -907,8 +928,8 @@ export function useFeedbackDetail(
   const fallback = mockFeedbacks.find((f) => f.id === id) ?? mockFeedbacks[0];
   return useQuery<Feedback, NormalizedError>({
     queryKey: QUERY_KEYS.FEEDBACK_DETAIL(id ?? 0),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true ? mocked(fallback) : () => feedbackApi.detail(id!),
+    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedback/{id}). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode() ? mocked(fallback) : () => feedbackBeApi.detail(id!),
     enabled: id != null,
     placeholderData: fallback,
     ...options,
@@ -924,14 +945,31 @@ export function useUpdateFeedbackMutation(
     NormalizedError,
     { id: number; payload: UpdateFeedbackRequest }
   >({
-    mutationFn: ({ id, payload }) => feedbackApi.update(id, payload),
+    ...options,
+    // BE 연결됨 (AdminFeedbackController PATCH /v1/admin/feedback/{id}). VITE_USE_MOCK=true 면 mock.
+    mutationFn: isMockMode()
+      ? ({ id, payload }) => {
+          // mock — 새 객체를 만들어 반환(+ mockFeedbacks 항목 교체)해 재조회/리렌더가 확실하도록
+          const idx = mockFeedbacks.findIndex((x) => x.id === id);
+          const base = idx >= 0 ? mockFeedbacks[idx] : mockFeedbacks[0];
+          const updated: Feedback = {
+            ...base,
+            status: payload.status ?? base.status,
+            admin_reply: payload.admin_reply ?? base.admin_reply,
+            admin_internal_memo: payload.admin_internal_memo ?? base.admin_internal_memo,
+          };
+          if (idx >= 0) mockFeedbacks[idx] = updated;
+          return Promise.resolve(updated);
+        }
+      : ({ id, payload }) => feedbackBeApi.update(id, payload),
     onSuccess: (...args) => {
-      const [, vars] = args;
-      qc.invalidateQueries({ queryKey: ['feedbacks'] });
-      qc.invalidateQueries({ queryKey: QUERY_KEYS.FEEDBACK_DETAIL(vars.id) });
+      const [data, vars] = args;
+      // 뮤테이션이 돌려준 최신 데이터를 상세 캐시에 직접 반영 — 재조회 없이 즉시 화면 갱신
+      qc.setQueryData(QUERY_KEYS.FEEDBACK_DETAIL(vars.id), data);
+      // refetchType:'all' — 비활성 목록 쿼리까지 즉시 재조회해 목록 도착 시 최신 상태
+      qc.invalidateQueries({ queryKey: ['feedbacks'], refetchType: 'all' });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -942,7 +980,8 @@ export function useBlocks(
 ) {
   return useQuery<PageResponse<BlockEntry>, NormalizedError>({
     queryKey: QUERY_KEYS.BLOCKS(params),
-    queryFn: mocked(mockBlocksPage),
+    // BE 연결됨 (AdminBlockController GET /v1/admin/block). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode() ? mocked(mockBlocksPage) : () => blockBeApi.getBlocks(params),
     placeholderData: mockBlocksPage,
     ...options,
   });
@@ -966,6 +1005,7 @@ export function useCreateBannedWordMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BannedWord, NormalizedError, BannedWordUpsertRequest>({
+    ...options,
     mutationFn: (payload) => {
       const next: BannedWord = {
         id: Date.now(),
@@ -986,7 +1026,6 @@ export function useCreateBannedWordMutation(
       qc.invalidateQueries({ queryKey: ['banned-words'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -995,6 +1034,7 @@ export function useToggleBannedWordMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BannedWord, NormalizedError, { id: number; is_active: boolean }>({
+    ...options,
     mutationFn: ({ id, is_active }) => {
       const target = mockBannedWords.find((w) => w.id === id)!;
       target.is_active = is_active;
@@ -1005,13 +1045,13 @@ export function useToggleBannedWordMutation(
       qc.invalidateQueries({ queryKey: ['banned-words'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useDeleteBannedWordMutation(options?: MutationOpts<void, number>) {
   const qc = useQueryClient();
   return useMutation<void, NormalizedError, number>({
+    ...options,
     mutationFn: (id) => {
       const idx = mockBannedWords.findIndex((w) => w.id === id);
       if (idx >= 0) mockBannedWords.splice(idx, 1);
@@ -1021,7 +1061,6 @@ export function useDeleteBannedWordMutation(options?: MutationOpts<void, number>
       qc.invalidateQueries({ queryKey: ['banned-words'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1120,6 +1159,7 @@ export function useUpdateMatchingWeightsMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<MatchingWeights, NormalizedError, UpdateMatchingWeightsRequest>({
+    ...options,
     mutationFn: (payload) => {
       Object.assign(mockMatchingWeights, payload, {
         updated_at: new Date().toISOString(),
@@ -1131,7 +1171,6 @@ export function useUpdateMatchingWeightsMutation(
       qc.invalidateQueries({ queryKey: QUERY_KEYS.MATCHING_WEIGHTS });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1153,6 +1192,7 @@ export function useCreateAdminMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<AdminAccount, NormalizedError, CreateAdminRequest>({
+    ...options,
     mutationFn: (payload) => {
       const next: AdminAccount = {
         id: Date.now(),
@@ -1177,7 +1217,6 @@ export function useCreateAdminMutation(
       qc.invalidateQueries({ queryKey: ['admins'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1186,6 +1225,7 @@ export function useUpdateAdminMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<AdminAccount, NormalizedError, { id: number; payload: UpdateAdminRequest }>({
+    ...options,
     mutationFn: ({ id, payload }) => {
       const target = mockAdmins.find((a) => a.id === id)!;
       if (payload.name) target.name = payload.name;
@@ -1209,7 +1249,6 @@ export function useUpdateAdminMutation(
       qc.invalidateQueries({ queryKey: ['admins'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1242,6 +1281,7 @@ export function useCreatePolicyMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PolicyDoc, NormalizedError, PolicyUpsertRequest>({
+    ...options,
     mutationFn: (payload) => {
       const now = new Date().toISOString();
       const next: PolicyDoc = {
@@ -1271,7 +1311,6 @@ export function useCreatePolicyMutation(
       qc.invalidateQueries({ queryKey: ['policies'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1281,6 +1320,7 @@ export function useTogglePolicyActiveMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PolicyDoc, NormalizedError, { uuid: string; is_active: boolean }>({
+    ...options,
     mutationFn: ({ uuid, is_active }) => {
       const target = mockPolicies.find((p) => p.uuid === uuid)!;
       target.is_active = is_active;
@@ -1291,7 +1331,6 @@ export function useTogglePolicyActiveMutation(
       qc.invalidateQueries({ queryKey: ['policies'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1305,6 +1344,7 @@ export function useActivatePolicyMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PolicyDoc, NormalizedError, { uuid: string }>({
+    ...options,
     mutationFn: ({ uuid }) => {
       const target = mockPolicies.find((p) => p.uuid === uuid)!;
       const now = new Date().toISOString();
@@ -1322,7 +1362,6 @@ export function useActivatePolicyMutation(
       qc.invalidateQueries({ queryKey: ['policies'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1360,6 +1399,7 @@ export function useFaqDetail(id: number | undefined, options?: QueryOpts<FaqItem
 export function useCreateFaqMutation(options?: MutationOpts<FaqItem, FaqUpsertRequest>) {
   const qc = useQueryClient();
   return useMutation<FaqItem, NormalizedError, FaqUpsertRequest>({
+    ...options,
     mutationFn: (payload) => {
       const now = new Date().toISOString();
       const next: FaqItem = {
@@ -1380,7 +1420,6 @@ export function useCreateFaqMutation(options?: MutationOpts<FaqItem, FaqUpsertRe
       qc.invalidateQueries({ queryKey: ['faqs'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1389,6 +1428,7 @@ export function useUpdateFaqMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<FaqItem, NormalizedError, { id: number; payload: FaqUpsertRequest }>({
+    ...options,
     mutationFn: ({ id, payload }) => {
       const target = mockFaqs.find((f) => f.id === id)!;
       target.category = payload.category;
@@ -1404,13 +1444,13 @@ export function useUpdateFaqMutation(
       qc.invalidateQueries({ queryKey: ['faqs'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useDeleteFaqMutation(options?: MutationOpts<void, number>) {
   const qc = useQueryClient();
   return useMutation<void, NormalizedError, number>({
+    ...options,
     mutationFn: (id) => {
       const idx = mockFaqs.findIndex((f) => f.id === id);
       if (idx >= 0) mockFaqs.splice(idx, 1);
@@ -1420,7 +1460,6 @@ export function useDeleteFaqMutation(options?: MutationOpts<void, number>) {
       qc.invalidateQueries({ queryKey: ['faqs'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1449,6 +1488,7 @@ export function useUpdateSystemMessageMutation(
     NormalizedError,
     { uuid: string; payload: SystemMessageUpsertRequest }
   >({
+    ...options,
     mutationFn: ({ uuid, payload }) => {
       const target = mockSystemMessages.find((m) => m.uuid === uuid)!;
       target.title = payload.title;
@@ -1463,7 +1503,6 @@ export function useUpdateSystemMessageMutation(
       qc.invalidateQueries({ queryKey: ['system-messages'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1471,8 +1510,8 @@ export function useBroadcastSystemMessageMutation(
   options?: MutationOpts<{ sent: number }, SystemMessageBroadcastRequest>
 ) {
   return useMutation<{ sent: number }, NormalizedError, SystemMessageBroadcastRequest>({
-    mutationFn: (payload) => Promise.resolve({ sent: payload.target === 'PREMIUM_CHATS' ? 482 : 2814 }),
     ...options,
+    mutationFn: (payload) => Promise.resolve({ sent: payload.target === 'PREMIUM_CHATS' ? 482 : 2814 }),
   });
 }
 // suppress unused warning for AdminListParams (kept for API surface)
@@ -1525,6 +1564,7 @@ export function useCreateAdminNoticeMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<NoticeBe, NormalizedError, NoticeBeUpsertRequest>({
+    ...options,
     // BE 연결됨 (AdminNoticeController POST /v1/admin/notice). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
       ? (payload) => {
@@ -1552,7 +1592,6 @@ export function useCreateAdminNoticeMutation(
       qc.invalidateQueries({ queryKey: ['notices-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1561,6 +1600,7 @@ export function useUpdateAdminNoticeMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<NoticeBe, NormalizedError, { id: number; payload: NoticeBeUpsertRequest }>({
+    ...options,
     // BE 연결됨 (AdminNoticeController PATCH /v1/admin/notice/{id}). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
       ? ({ id, payload }) => {
@@ -1586,13 +1626,13 @@ export function useUpdateAdminNoticeMutation(
       qc.invalidateQueries({ queryKey: QUERY_KEYS.NOTICE_BE_DETAIL(vars.id) });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useDeleteAdminNoticeMutation(options?: MutationOpts<void, number>) {
   const qc = useQueryClient();
   return useMutation<void, NormalizedError, number>({
+    ...options,
     // BE 연결됨 (AdminNoticeController DELETE /v1/admin/notice/{id}). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
       ? (id) => {
@@ -1605,7 +1645,6 @@ export function useDeleteAdminNoticeMutation(options?: MutationOpts<void, number
       qc.invalidateQueries({ queryKey: ['notices-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1681,6 +1720,7 @@ export function useDecideBalApplyMutation(
     NormalizedError,
     { applyId: number; payload: BalApplyDecisionRequest }
   >({
+    ...options,
     // BE 연결됨 — 거절: PATCH /v1/admin/bal-apply/{id}/reject.
     // 승인 흐름은 mutation 호출 없이 ApplyQueue [승인 → 초안] 버튼이 /balance/new?fromApply=N 으로 이동,
     // Editor 의 [초안 저장] 등에서 POST /v1/admin/bal-game body 의 applyId 로 BE 가 APPROVED 처리.
@@ -1749,7 +1789,6 @@ export function useDecideBalApplyMutation(
       qc.invalidateQueries({ queryKey: ['bal-games-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1825,6 +1864,7 @@ export function useCreateBalGameBeMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BalGameBe, NormalizedError, BalGameCreateRequest>({
+    ...options,
     // BE 연결됨 (AdminBalGameController POST /v1/admin/bal-game).
     // status 생략 시 DRAFT, SCHEDULED 면 scheduledAt 필수(미래·10분 단위), ARCHIVED 신규 거부.
     // VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
@@ -1861,7 +1901,6 @@ export function useCreateBalGameBeMutation(
       qc.invalidateQueries({ queryKey: ['bal-games-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1894,6 +1933,7 @@ export function useHideBalCommentMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BalCommentBe, NormalizedError, { gameId: number; commentId: number }>({
+    ...options,
     mutationFn: ({ gameId, commentId }) => {
       const list = mockBalCommentsByGame[gameId] ?? [];
       const target = list.find((c) => c.id === commentId);
@@ -1907,7 +1947,6 @@ export function useHideBalCommentMutation(
       qc.invalidateQueries({ queryKey: ['bal-comments-be', vars.gameId] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1919,6 +1958,7 @@ export function useUpdateBalGameBeMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<BalGameBe, NormalizedError, { gameId: number; payload: BalGameUpdateRequest }>({
+    ...options,
     // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     mutationFn: isMockMode()
       ? ({ gameId, payload }) => {
@@ -1944,7 +1984,6 @@ export function useUpdateBalGameBeMutation(
       qc.invalidateQueries({ queryKey: QUERY_KEYS.BAL_GAME_BE_DETAIL(vars.gameId) });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -1995,6 +2034,7 @@ export function useHidePostItBeMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<PostItBe, NormalizedError, { id: number; reason?: string }>({
+    ...options,
     // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{id}/hide). VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
       ? ({ id }) => {
@@ -2008,13 +2048,13 @@ export function useHidePostItBeMutation(
       qc.invalidateQueries({ queryKey: ['post-its-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
 export function useRestorePostItBeMutation(options?: MutationOpts<PostItBe, number>) {
   const qc = useQueryClient();
   return useMutation<PostItBe, NormalizedError, number>({
+    ...options,
     // BE 연결됨 (AdminPostItController POST /v1/admin/post-its/{id}/restore — is_hidden=false + report_count=0 리셋).
     // VITE_USE_MOCK=true 면 mock, false 면 실제 BE 호출.
     mutationFn: isMockMode()
@@ -2031,7 +2071,6 @@ export function useRestorePostItBeMutation(options?: MutationOpts<PostItBe, numb
       qc.invalidateQueries({ queryKey: ['post-its-be'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -2135,6 +2174,7 @@ export function useCreatePushMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<Push, NormalizedError, PushUpsertRequest>({
+    ...options,
     mutationFn: (payload) => {
       const now = new Date().toISOString();
       const targetCount = estimateTargetCount(payload.target);
@@ -2163,7 +2203,6 @@ export function useCreatePushMutation(
       qc.invalidateQueries({ queryKey: ['pushes'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -2173,6 +2212,7 @@ export function useSendPushNowMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<Push, NormalizedError, { id: number }>({
+    ...options,
     mutationFn: ({ id }) => {
       const target = mockPushes.find((p) => p.id === id)!;
       target.status = 'SENT';
@@ -2185,7 +2225,6 @@ export function useSendPushNowMutation(
       qc.invalidateQueries({ queryKey: ['pushes'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 
@@ -2195,6 +2234,7 @@ export function useCancelPushMutation(
 ) {
   const qc = useQueryClient();
   return useMutation<Push, NormalizedError, { id: number }>({
+    ...options,
     mutationFn: ({ id }) => {
       const target = mockPushes.find((p) => p.id === id)!;
       target.status = 'CANCELED';
@@ -2204,7 +2244,6 @@ export function useCancelPushMutation(
       qc.invalidateQueries({ queryKey: ['pushes'] });
       options?.onSuccess?.(...args);
     },
-    ...options,
   });
 }
 

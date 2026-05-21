@@ -1,63 +1,27 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, ArrowRight } from 'lucide-react'
-import {
-  useBlocks,
-  formatDateTime,
-  BLOCK_REASON_LABEL,
-  BLOCK_REASON_CATEGORY,
-} from '@ef-fe-admin/shared'
-import type { BlockReasonCategory } from '@ef-fe-admin/shared'
+import { useBlocks, formatDateTime } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import EmptyState from '../../components/ui/EmptyState'
 import Pagination from '../../components/ui/Pagination'
-import FilterChips from '../../components/ui/FilterChips'
 import { Badge } from '../../components/ui/Badge'
-
-const REASON_OPTIONS: { value: BlockReasonCategory | undefined; label: string }[] = [
-  { value: undefined, label: '전체' },
-  { value: BLOCK_REASON_CATEGORY.PROFANITY_HATE, label: '욕설·혐오' },
-  { value: BLOCK_REASON_CATEGORY.SEXUAL_CONTENT, label: '음란·성적' },
-  { value: BLOCK_REASON_CATEGORY.SPAM_PROMOTION, label: '스팸·홍보' },
-  { value: BLOCK_REASON_CATEGORY.THREAT, label: '협박·위협' },
-  { value: BLOCK_REASON_CATEGORY.FAKE_IDENTITY, label: '사칭·허위' },
-  { value: BLOCK_REASON_CATEGORY.OTHER, label: '기타' },
-]
 
 export default function BlocksPage() {
   const navigate = useNavigate()
   const [keyword, setKeyword] = useState('')
-  const [reasonCategory, setReasonCategory] = useState<BlockReasonCategory | undefined>(
-    undefined
-  )
   const [page, setPage] = useState(0)
   const { data, isLoading } = useBlocks({
     keyword: keyword || undefined,
-    reasonCategory,
     page,
     size: 20,
   })
-
-  // 페이지 내 양방향 쌍 감지 — (a→b)와 (b→a) 가 둘 다 있으면 상호 차단으로 표시
-  const mutualPairKeys = useMemo(() => {
-    const set = new Set<string>()
-    const all = new Set<string>()
-    ;(data?.content ?? []).forEach((b) => {
-      all.add(`${b.blockerId}-${b.blockedId}`)
-    })
-    ;(data?.content ?? []).forEach((b) => {
-      if (all.has(`${b.blockedId}-${b.blockerId}`)) {
-        set.add(`${b.blockerId}-${b.blockedId}`)
-      }
-    })
-    return set
-  }, [data?.content])
 
   return (
     <>
       <Topbar
         title="차단 내역"
-        subtitle="유저 간 차단 관계 · 같은 페이지에서 양방향 쌍이 보이면 상호 차단으로 표시됩니다."
+        subtitle="유저 간 차단 관계 · 역방향 차단도 존재하면 '상호 차단'으로 표시됩니다."
       />
 
       <div className="card mb-4">
@@ -74,14 +38,6 @@ export default function BlocksPage() {
               }}
             />
           </div>
-          <FilterChips
-            value={reasonCategory}
-            onChange={(v) => {
-              setReasonCategory(v)
-              setPage(0)
-            }}
-            options={REASON_OPTIONS}
-          />
           <div className="flex-1" />
           <div className="text-[11.5px] text-text-soft">
             전체 {data?.totalElements ?? 0}건
@@ -101,15 +57,13 @@ export default function BlocksPage() {
                 <th>차단한 유저</th>
                 <th></th>
                 <th>차단당한 유저</th>
-                <th>사유 카테고리</th>
-                <th>상세 사유</th>
                 <th>차단 시각</th>
                 <th>관계</th>
               </tr>
             </thead>
             <tbody>
               {data.content.map((b) => {
-                const isMutual = mutualPairKeys.has(`${b.blockerId}-${b.blockedId}`)
+                const isMutual = b.mutual
                 return (
                   <tr key={b.id}>
                     <td>
@@ -137,14 +91,6 @@ export default function BlocksPage() {
                         </span>
                       </button>
                     </td>
-                    <td>
-                      <ReasonBadge category={b.reasonCategory} />
-                    </td>
-                    <td className="text-text-sub max-w-[280px]">
-                      <div className="line-clamp-2 text-[12.5px]">
-                        {b.detail ?? <span className="text-text-soft">-</span>}
-                      </div>
-                    </td>
                     <td className="text-text-sub whitespace-nowrap">
                       {formatDateTime(b.createTime)}
                     </td>
@@ -166,16 +112,4 @@ export default function BlocksPage() {
       <Pagination page={page} totalPages={data?.totalPages ?? 0} onChange={setPage} />
     </>
   )
-}
-
-function ReasonBadge({ category }: { category: BlockReasonCategory }) {
-  const tone: 'danger' | 'warn' | 'point' | 'neutral' =
-    category === 'PROFANITY_HATE' || category === 'THREAT'
-      ? 'danger'
-      : category === 'SEXUAL_CONTENT' || category === 'FAKE_IDENTITY'
-        ? 'warn'
-        : category === 'SPAM_PROMOTION'
-          ? 'point'
-          : 'neutral'
-  return <Badge tone={tone}>{BLOCK_REASON_LABEL[category]}</Badge>
 }

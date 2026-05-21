@@ -13,6 +13,17 @@ import Pagination from '../../components/ui/Pagination'
 import EmptyState from '../../components/ui/EmptyState'
 import { UserStatusBadge } from '../../components/ui/Badge'
 
+/**
+ * 목록 표시용 — 32자리 UUID 를 앞 8-4 그룹까지만 보여주고 나머지는 생략.
+ * 예) "550e8400e29b41d4a716446655440000" → "550e8400-e29b…"
+ * 32자리 hex 가 아니면(예: mock 의 u-101) 원본 그대로.
+ */
+function shortUuid(raw: string): string {
+  const hex = raw.replace(/-/g, '')
+  if (hex.length !== 32) return raw
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}…`
+}
+
 const STATUS_OPTIONS: { value: UserStatus | undefined; label: string }[] = [
   { value: undefined, label: '전체' },
   { value: USER_STATUS.ACTIVE, label: '정상' },
@@ -87,20 +98,18 @@ export default function UsersPage() {
                 <tr
                   key={u.id}
                   className="cursor-pointer"
-                  onClick={() => navigate(`/users/${u.uuid}`)}
+                  onClick={() => navigate(`/users/${u.id}`)}
                 >
-                  <td className="font-extrabold">
-                    {u.nickname}
-                    <span className="text-text-soft font-normal ml-1 text-[11px]">
-                      #{u.scode}
-                    </span>
+                  <td className="font-extrabold">{u.nickname}</td>
+                  <td
+                    className="text-text-sub font-mono text-[11px]"
+                    title={u.uuid}
+                  >
+                    {shortUuid(u.uuid)}
                   </td>
-                  <td className="text-text-sub font-mono text-[11px]">{u.uuid}</td>
                   <td className="text-text-sub">{u.login_id}</td>
                   <td className="text-text-sub">{u.age}세</td>
-                  <td className="text-text-sub">
-                    {u.area_id != null ? `지역 ${u.area_id}` : '-'}
-                  </td>
+                  <td className="text-text-sub">{u.area ?? '-'}</td>
                   <td className="text-text-sub">{formatDateTime(u.create_time)}</td>
                   <td className="text-text-sub">{formatDateTime(u.last_login_time)}</td>
                   <td>

@@ -8,6 +8,7 @@ export interface Feedback {
   id: number;
   reporter_id: number;
   reporter_nickname?: string;
+  reporter_login_id?: string;
   feedback_type: FeedbackType;
   category_code: FeedbackCategory;
   title: string;

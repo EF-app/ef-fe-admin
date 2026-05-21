@@ -56,12 +56,7 @@ export default function ProfileReviewsPage() {
                   {u.nickname?.[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-extrabold truncate">
-                    {u.nickname}
-                    <span className="text-text-soft ml-1 text-[11px] font-normal">
-                      #{u.scode}
-                    </span>
-                  </div>
+                  <div className="font-extrabold truncate">{u.nickname}</div>
                   <div className="text-[11px] text-text-soft mt-0.5">
                     {u.age}세 · {u.job ?? '-'}
                   </div>
@@ -188,7 +183,7 @@ function ProfileReviewSidePanel({
   return (
     <UserProfilePanel
       open
-      userUuid={user.uuid}
+      userId={user.id}
       onClose={onClose}
       actions={actions}
       headerExtra={<Badge tone="warn">검수 대기</Badge>}

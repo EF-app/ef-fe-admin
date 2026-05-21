@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, CheckCircle2 } from 'lucide-react'
 import {
   useFeedbackDetail,
   useUpdateFeedbackMutation,
@@ -24,6 +24,7 @@ export default function FeedbackDetailPage() {
   const [reply, setReply] = useState('')
   const [memo, setMemo] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (feedback) {
@@ -33,20 +34,26 @@ export default function FeedbackDetailPage() {
     }
   }, [feedback?.id])
 
+  // 저장 후 목록으로 이동하지 않고 이 상세에 머무름 — 변경 내용은 쿼리 무효화로 즉시 반영.
   const updateMutation = useUpdateFeedbackMutation({
-    onSuccess: () => navigate('/feedback'),
+    onSuccess: () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    },
     onError: (e) => setError(e.message),
   })
 
   const handleSubmit = () => {
     if (!feedback) return
     setError(null)
+    setSaved(false)
+    // 빈 문자열도 그대로 전송 — 답변/메모를 비우는 수정이 가능하도록
     updateMutation.mutate({
       id: feedback.id,
       payload: {
         status,
-        admin_reply: reply.trim() || undefined,
-        admin_internal_memo: memo.trim() || undefined,
+        admin_reply: reply.trim(),
+        admin_internal_memo: memo.trim(),
       },
     })
   }
@@ -107,7 +114,17 @@ export default function FeedbackDetailPage() {
         </div>
 
         <div className="text-[11.5px] text-text-soft">
-          작성자 @{feedback.reporter_nickname ?? '-'} · {formatDateTime(feedback.create_time)}
+          작성자{' '}
+          <button
+            type="button"
+            onClick={() => navigate(`/users/${feedback.reporter_id}`)}
+            className="font-bold text-point-dark hover:underline"
+          >
+            @{feedback.reporter_nickname ?? '-'} · #{feedback.reporter_id} ·{' '}
+            {feedback.reporter_login_id ?? '-'}
+          </button>
+          {' · '}
+          {formatDateTime(feedback.create_time)}
         </div>
       </div>
 
@@ -131,7 +148,14 @@ export default function FeedbackDetailPage() {
         </div>
 
         <div>
-          <label className="form-label">유저에게 보낼 답변 (선택)</label>
+          <label className="form-label">
+            유저에게 보낼 답변 (선택)
+            {feedback.admin_reply_at && (
+              <span className="text-text-soft font-normal ml-1">
+                · 답변 일시 {formatDateTime(feedback.admin_reply_at)}
+              </span>
+            )}
+          </label>
           <textarea
             className="form-textarea"
             value={reply}
@@ -154,6 +178,9 @@ export default function FeedbackDetailPage() {
         {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
 
         <div className="flex justify-end gap-2">
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/feedback')}>
+            목록으로
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate('/feedback')}>
             취소
           </button>
@@ -166,6 +193,16 @@ export default function FeedbackDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* 저장 완료 팝업 — 2.5초 후 자동 사라짐 */}
+      {saved && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none">
+          <div className="bg-surface rounded-xl shadow-lg border border-border px-6 py-4 flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-success" />
+            <span className="text-[14px] font-extrabold">수정되었습니다.</span>
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -29,7 +29,6 @@ import type { PremiumPlanCode } from '../types/premium';
 import type { PolicyKind, PolicyStatus } from '../types/policy';
 import type { SystemMessageEvent } from '../types/systemMessage';
 import type { NoticeBeCategory, NoticeBeStatus } from '../types/noticeBe';
-import type { BlockReasonCategory } from '../types/block';
 import type { FaqCategory } from '../types/faq';
 import type { PushTarget, PushKind, PushStatus } from '../types/push';
 import { LOGIN_FAILURE_REASON, type LoginFailureReason } from './enums';
@@ -325,14 +324,4 @@ export const LOGIN_DEVICE_LABEL: Record<LoginDevice, string> = {
   IOS: 'iOS',
   ANDROID: 'Android',
   WEB: 'Web',
-};
-
-/** BE block.reason_category 라벨 */
-export const BLOCK_REASON_LABEL: Record<BlockReasonCategory, string> = {
-  PROFANITY_HATE: '욕설·혐오',
-  SEXUAL_CONTENT: '음란·성적',
-  SPAM_PROMOTION: '스팸·홍보',
-  THREAT: '협박·위협',
-  FAKE_IDENTITY: '사칭·허위정보',
-  OTHER: '기타',
 };

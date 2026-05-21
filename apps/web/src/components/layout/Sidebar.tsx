@@ -44,7 +44,7 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
     title: '운영',
     items: [
       { to: '/dashboard', label: '대시보드', icon: <Home size={16} /> },
-      { to: '/users', label: '유저 활동내역', icon: <Users size={16} /> },
+      { to: '/users', label: '유저관리', icon: <Users size={16} /> },
       {
         to: '/profile-reviews',
         label: '프로필 관리',

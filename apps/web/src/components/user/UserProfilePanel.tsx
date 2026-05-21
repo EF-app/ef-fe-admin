@@ -5,9 +5,6 @@ import {
   formatDate,
   formatDateTime,
   MATCH_PURPOSE_LABEL,
-  DRINKING_LABEL,
-  SMOKING_LABEL,
-  TATTOO_LABEL,
   USER_STATUS_LABEL,
 } from '@ef-fe-admin/shared'
 import type {
@@ -19,7 +16,7 @@ import type {
 
 interface Props {
   open: boolean
-  userUuid?: string
+  userId?: number
   onClose: () => void
   actions?: React.ReactNode
   headerExtra?: React.ReactNode
@@ -44,12 +41,12 @@ interface Props {
  */
 export default function UserProfilePanel({
   open,
-  userUuid,
+  userId,
   onClose,
   actions,
   headerExtra,
 }: Props) {
-  const { data: user, isLoading } = useUserDetail(userUuid)
+  const { data: user, isLoading } = useUserDetail(userId)
 
   useEffect(() => {
     if (!open) return
@@ -138,9 +135,9 @@ function ProfileBody({ user }: { user: UserDetail }) {
       {/* Hero */}
       <Hero user={user} />
 
-      {/* 관심 대상 */}
-      {p?.interest_target && (
-        <Section label="관심 대상">
+      {/* 관심 대상 — 미입력이어도 항목은 항상 노출 */}
+      <Section label="관심 대상">
+        {p?.interest_target ? (
           <div className="bg-surface rounded-[18px] px-4 py-3.5 border border-border flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center text-[20px]"
@@ -152,24 +149,26 @@ function ProfileBody({ user }: { user: UserDetail }) {
               {interestLabel(p.interest_target)}
             </div>
           </div>
-        </Section>
-      )}
+        ) : (
+          <EmptyCard />
+        )}
+      </Section>
 
       {/* 한 줄 소개 */}
-      {p?.bio_message && (
-        <Section label="한 줄 소개">
+      <Section label="한 줄 소개">
+        {p?.bio_message ? (
           <div className="bg-surface rounded-[18px] px-4 py-3.5 text-[13.5px] border border-border leading-relaxed">
             "{p.bio_message}"
           </div>
-        </Section>
-      )}
+        ) : (
+          <EmptyCard />
+        )}
+      </Section>
 
       {/* 관심사 키워드 */}
-      {p?.keywords && (
-        <Section label="관심사 키워드">
-          <KeywordsCard keywords={p.keywords} myTags={p.my_tags} />
-        </Section>
-      )}
+      <Section label="관심사 키워드">
+        <KeywordsCard keywords={p?.keywords} myTags={p?.my_tags} />
+      </Section>
 
       {/* 생활 습관 */}
       <Section label="생활 습관">
@@ -182,25 +181,25 @@ function ProfileBody({ user }: { user: UserDetail }) {
       </Section>
 
       {/* MBTI */}
-      {p?.mbti && (
-        <Section label="MBTI">
+      <Section label="MBTI">
+        {p?.mbti ? (
           <MbtiCard mbti={p.mbti} desc={p.mbti_desc} emoji={p.mbti_emoji} />
-        </Section>
-      )}
+        ) : (
+          <EmptyCard />
+        )}
+      </Section>
 
       {/* 이상형 */}
-      {(p?.important_points?.length || p?.ideal_hair) && (
-        <Section label="이상형">
-          <IdealCard profile={p} />
-        </Section>
-      )}
+      <Section label="이상형">
+        <IdealCard profile={p} />
+      </Section>
 
       {/* 기본 정보 (어드민) */}
       <Section label="기본 정보">
         <div className="bg-surface rounded-[18px] border border-border px-4 py-2">
           <MetaRow label="UUID" value={user.uuid} mono />
           <MetaRow label="로그인 ID" value={user.login_id} />
-          <MetaRow label="지역 ID" value={user.area_id ?? '-'} />
+          <MetaRow label="지역" value={user.area ?? '-'} />
           <MetaRow
             label="본인 인증"
             value={
@@ -370,15 +369,12 @@ function Hero({ user }: { user: UserDetail }) {
             {user.nickname}
           </div>
           <div className="text-[13px] text-text-soft">{user.age}세</div>
-          <div className="text-[11px] text-text-soft ml-1">
-            #{user.scode}
-          </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-text-sub">
           {user.profile?.mbti && (
             <span className="font-bold">🧬 {user.profile.mbti}</span>
           )}
-          <span>📍 지역 {user.area_id ?? '-'}</span>
+          <span>📍 {user.area ?? '-'}</span>
           <span>💼 {user.job ?? '직업 미입력'}</span>
         </div>
       </div>
@@ -434,13 +430,18 @@ function KeywordsCard({
   keywords,
   myTags,
 }: {
-  keywords: ProfileKeywordSet
+  keywords?: ProfileKeywordSet
   myTags?: string[]
 }) {
+  const hasAny =
+    (keywords != null &&
+      KEYWORD_GROUPS.some((g) => (keywords[g.key]?.length ?? 0) > 0)) ||
+    (myTags != null && myTags.length > 0)
+  if (!hasAny) return <EmptyCard />
   return (
     <div className="bg-surface rounded-[18px] border border-border px-4 py-4 space-y-3.5">
       {KEYWORD_GROUPS.map((g) => {
-        const chips = keywords[g.key]
+        const chips = keywords?.[g.key]
         if (!chips || chips.length === 0) return null
         return (
           <div key={g.key}>
@@ -474,20 +475,20 @@ function KeywordsCard({
 /* ===== 생활 습관 ===== */
 
 function HabitsCard({ profile }: { profile?: UserProfile }) {
-  if (!profile) return null
+  if (!profile) return <EmptyCard />
   return (
     <div className="bg-surface rounded-[18px] border border-border overflow-hidden">
       <HabitBlock
         icon="🍷"
         label="음주"
-        freq={profile.drinking ? DRINKING_LABEL[profile.drinking] : '-'}
+        freq={profile.drinking ?? '-'}
         types={profile.drink_types ?? []}
       />
       <div className="h-px bg-border mx-4" />
       <HabitBlock
         icon="🌿"
         label="흡연"
-        freq={profile.smoking ? SMOKING_LABEL[profile.smoking] : '-'}
+        freq={profile.smoking ?? '-'}
         types={profile.smoke_types ?? []}
       />
       <div className="h-px bg-border mx-4" />
@@ -501,7 +502,7 @@ function HabitsCard({ profile }: { profile?: UserProfile }) {
         <div className="flex-1">
           <div className="text-[11px] font-bold text-text-soft">타투</div>
           <div className="text-[13.5px] font-extrabold mt-0.5">
-            {profile.tattoo ? TATTOO_LABEL[profile.tattoo] : '-'}
+            {profile.tattoo ?? '-'}
           </div>
         </div>
       </div>
@@ -564,7 +565,7 @@ function StyleCard({
   profile?: UserProfile
   job?: string | null
 }) {
-  if (!profile) return null
+  if (!profile) return <EmptyCard />
   return (
     <div className="bg-surface rounded-[18px] border border-border px-4 py-4">
       {/* 외모 4종 */}
@@ -576,8 +577,8 @@ function StyleCard({
         {profile.body_type && (
           <Chip label={`👤 ${profile.body_type}`} tone="green" />
         )}
-        {profile.height != null && (
-          <Chip label={`📏 ${profile.height}cm`} tone="amber" />
+        {profile.height && (
+          <Chip label={`📏 ${profile.height}`} tone="amber" />
         )}
         {profile.vibe && <Chip label={`💬 ${profile.vibe}`} tone="purple" />}
       </div>
@@ -676,7 +677,16 @@ function MbtiCard({
 /* ===== 이상형 ===== */
 
 function IdealCard({ profile }: { profile?: UserProfile }) {
-  if (!profile) return null
+  const hasAny =
+    profile != null &&
+    ((profile.important_points?.length ?? 0) > 0 ||
+      !!profile.ideal_hair ||
+      !!profile.ideal_body ||
+      !!profile.ideal_height ||
+      !!profile.ideal_vibe ||
+      !!profile.match_purpose ||
+      !!profile.important_factor)
+  if (!profile || !hasAny) return <EmptyCard />
   return (
     <div className="bg-surface rounded-[18px] border border-border px-4 py-4">
       {profile.important_points && profile.important_points.length > 0 && (
@@ -756,6 +766,15 @@ function Section({
         </button>
       </div>
       {children}
+    </div>
+  )
+}
+
+/** 유저가 해당 항목을 작성하지 않았을 때 표시되는 빈 카드 — 항목(카테고리) 자체는 항상 노출. */
+function EmptyCard({ text = '미입력' }: { text?: string }) {
+  return (
+    <div className="bg-surface rounded-[18px] px-4 py-4 border border-border border-dashed text-[12.5px] text-text-soft text-center">
+      {text}
     </div>
   )
 }

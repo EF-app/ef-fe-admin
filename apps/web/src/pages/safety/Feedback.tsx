@@ -102,9 +102,11 @@ export default function FeedbackPage() {
                   <td>
                     <FeedbackTypeBadge type={f.feedback_type} />
                   </td>
-                  <td className="font-extrabold line-clamp-1 max-w-[320px]">{f.title}</td>
+                  <td className="font-extrabold max-w-[240px]">{f.title}</td>
                   <td className="text-text-sub">{FEEDBACK_CATEGORY_LABEL[f.category_code]}</td>
-                  <td className="text-text-sub">{f.reporter_nickname ?? '-'}</td>
+                  <td className="text-text-sub font-mono text-[11px] whitespace-nowrap">
+                    #{f.reporter_id} #{f.reporter_login_id ?? '-'}
+                  </td>
                   <td>
                     <FeedbackStatusBadge status={f.status} />
                   </td>

@@ -84,7 +84,7 @@ export default function App() {
         {/* 운영 */}
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="users" element={<UsersPage />} />
-        <Route path="users/:uuid" element={<UserDetailPage />} />
+        <Route path="users/:id" element={<UserDetailPage />} />
         <Route path="profile-reviews" element={<ProfileReviewsPage />} />
         <Route path="notices" element={<NoticesPage />} />
         <Route path="notices/new" element={<NoticeEditorPage />} />

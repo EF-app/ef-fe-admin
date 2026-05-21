@@ -29,7 +29,7 @@ import EmptyState from '../../../components/ui/EmptyState';
 export default function UserDetailScreen() {
   const { uuid } = useLocalSearchParams<{ uuid: string }>();
   const router = useRouter();
-  const { data: user } = useUserDetail(uuid);
+  const { data: user } = useUserDetail(uuid ? Number(uuid) : undefined);
 
   const [type, setType] = useState<SuspensionType>('WARNING');
   const [days, setDays] = useState(7);

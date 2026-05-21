@@ -10,8 +10,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 104,
     blockedNickname: '차가운바람',
     blockedUuid: 'u-104',
-    reasonCategory: 'SPAM_PROMOTION',
-    detail: '카톡 ID 보내달라며 외부 채널 유도',
+    mutual: false,
     createTime: '2026-05-08T17:00:00',
   },
   {
@@ -22,8 +21,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 102,
     blockedNickname: '별빛조각',
     blockedUuid: 'u-102',
-    reasonCategory: 'PROFANITY_HATE',
-    detail: '여러 번 욕설 사용',
+    mutual: true,
     createTime: '2026-05-07T10:14:00',
   },
   {
@@ -34,8 +32,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 103,
     blockedNickname: '라임소다',
     blockedUuid: 'u-103',
-    reasonCategory: 'OTHER',
-    detail: null,
+    mutual: true,
     createTime: '2026-05-07T11:02:00',
   },
   {
@@ -46,8 +43,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 104,
     blockedNickname: '차가운바람',
     blockedUuid: 'u-104',
-    reasonCategory: 'SEXUAL_CONTENT',
-    detail: '부적절한 사진 요구',
+    mutual: false,
     createTime: '2026-05-06T22:30:00',
   },
   {
@@ -58,8 +54,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 102,
     blockedNickname: '별빛조각',
     blockedUuid: 'u-102',
-    reasonCategory: 'OTHER',
-    detail: null,
+    mutual: false,
     createTime: '2026-05-05T08:00:00',
   },
   {
@@ -70,8 +65,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 104,
     blockedNickname: '차가운바람',
     blockedUuid: 'u-104',
-    reasonCategory: 'THREAT',
-    detail: '집 주소 알려달라고 협박',
+    mutual: false,
     createTime: '2026-05-04T14:20:00',
   },
   {
@@ -82,8 +76,7 @@ export const mockBlocks: BlockEntry[] = [
     blockedId: 109,
     blockedNickname: '겨울나라',
     blockedUuid: 'u-109',
-    reasonCategory: 'FAKE_IDENTITY',
-    detail: '프로필 사진과 실제 사진이 다름',
+    mutual: false,
     createTime: '2026-05-03T19:45:00',
   },
 ];
