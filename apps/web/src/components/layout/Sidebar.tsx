@@ -106,7 +106,7 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
   {
     title: '시스템',
     items: [
-      { to: '/admins', label: '관리자 계정', icon: <ShieldCheck size={16} /> },
+      { to: '/admin/account', label: '관리자 계정', icon: <ShieldCheck size={16} /> },
       { to: '/audit', label: '감사 로그', icon: <FileText size={16} /> },
       { to: '/policies', label: 'FAQ·약관·정책', icon: <BookOpen size={16} /> },
       { to: '/system-messages', label: '시스템 메시지', icon: <MessageSquare size={16} /> },

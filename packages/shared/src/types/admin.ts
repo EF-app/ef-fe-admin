@@ -14,6 +14,8 @@ export interface AdminAccount {
   phone: string;
   role: AdminRole;
   is_active: boolean;
+  /** 비밀번호 실패 누적으로 잠긴 시각 — null 또는 미래 시각 아님 = 잠금 아님 */
+  locked_until?: string | null;
   deactivated_at: string | null;
   deactivated_reason: string | null;
   last_login_at: string | null;

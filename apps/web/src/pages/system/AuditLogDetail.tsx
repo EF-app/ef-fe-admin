@@ -42,7 +42,7 @@ export default function AuditLogDetailPage() {
           <Field label="시각">{formatDateTime(log.create_time)}</Field>
           <Field label="관리자">
             <button
-              onClick={() => navigate(`/admins/${log.admin_id}`)}
+              onClick={() => navigate(`/admin/account/${log.admin_id}`)}
               className="font-extrabold text-point-dark hover:underline"
             >
               {log.admin_name ?? `#${log.admin_id}`}

@@ -122,10 +122,10 @@ export default function App() {
         <Route path="refunds" element={<RefundsPage />} />
         <Route path="premium" element={<PremiumPage />} />
 
-        {/* 시스템 */}
-        <Route path="admins" element={<AdminsPage />} />
-        <Route path="admins/new" element={<AdminEditorPage />} />
-        <Route path="admins/:id" element={<AdminEditorPage />} />
+        {/* 시스템 — BE /v1/admin/account 와 경로 통일 */}
+        <Route path="admin/account" element={<AdminsPage />} />
+        <Route path="admin/account/new" element={<AdminEditorPage />} />
+        <Route path="admin/account/:id" element={<AdminEditorPage />} />
         <Route path="audit" element={<AuditLogsPage />} />
         <Route path="audit/:id" element={<AuditLogDetailPage />} />
         <Route path="policies" element={<PoliciesPage />} />

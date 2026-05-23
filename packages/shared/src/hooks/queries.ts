@@ -22,6 +22,11 @@ import { auditLogsApi, AuditLogListParams } from '../api/auditLogs';
 import { suspensionLogsApi } from '../api/suspensionLogs';
 import { postItsApi } from '../api/postIts';
 import { feedbackBeApi } from '../api/feedbackBe';
+import { accountBeApi } from '../api/accountBe';
+import type {
+  AdminPasswordChangeRequest,
+  AdminPasswordResetRequest,
+} from '../api/accountBe';
 import type {
   AdminAccount,
   LoginRequest,
@@ -1181,7 +1186,8 @@ export function useAdmins(
 ) {
   return useQuery<PageResponse<AdminAccount>, NormalizedError>({
     queryKey: QUERY_KEYS.ADMINS(params),
-    queryFn: mocked(mockAdminsPage),
+    // BE 연결됨 (AdminAccountController GET /v1/admin/account). VITE_USE_MOCK=true 면 mock.
+    queryFn: isMockMode() ? mocked(mockAdminsPage) : () => accountBeApi.list(params),
     placeholderData: mockAdminsPage,
     ...options,
   });
@@ -1193,26 +1199,29 @@ export function useCreateAdminMutation(
   const qc = useQueryClient();
   return useMutation<AdminAccount, NormalizedError, CreateAdminRequest>({
     ...options,
-    mutationFn: (payload) => {
-      const next: AdminAccount = {
-        id: Date.now(),
-        uuid: `admin-${Date.now()}`,
-        login_id: payload.login_id,
-        name: payload.name,
-        email: payload.email,
-        phone: payload.phone,
-        role: payload.role,
-        is_active: true,
-        deactivated_at: null,
-        deactivated_reason: null,
-        last_login_at: null,
-        last_login_ip: null,
-        create_time: new Date().toISOString(),
-        update_time: new Date().toISOString(),
-      };
-      mockAdmins.unshift(next);
-      return Promise.resolve(next);
-    },
+    // BE 연결됨 (AdminAccountController POST /v1/admin/account). VITE_USE_MOCK=true 면 mock.
+    mutationFn: isMockMode()
+      ? (payload) => {
+          const next: AdminAccount = {
+            id: Date.now(),
+            uuid: `admin-${Date.now()}`,
+            login_id: payload.login_id,
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone,
+            role: payload.role,
+            is_active: true,
+            deactivated_at: null,
+            deactivated_reason: null,
+            last_login_at: null,
+            last_login_ip: null,
+            create_time: new Date().toISOString(),
+            update_time: new Date().toISOString(),
+          };
+          mockAdmins.unshift(next);
+          return Promise.resolve(next);
+        }
+      : (payload) => accountBeApi.create(payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['admins'] });
       options?.onSuccess?.(...args);
@@ -1226,25 +1235,80 @@ export function useUpdateAdminMutation(
   const qc = useQueryClient();
   return useMutation<AdminAccount, NormalizedError, { id: number; payload: UpdateAdminRequest }>({
     ...options,
-    mutationFn: ({ id, payload }) => {
-      const target = mockAdmins.find((a) => a.id === id)!;
-      if (payload.name) target.name = payload.name;
-      if (payload.email) target.email = payload.email;
-      if (payload.phone) target.phone = payload.phone;
-      if (payload.role) target.role = payload.role;
-      if (payload.is_active !== undefined) {
-        target.is_active = payload.is_active;
-        if (!payload.is_active) {
-          target.deactivated_at = new Date().toISOString();
-          target.deactivated_reason = payload.deactivated_reason ?? null;
-        } else {
-          target.deactivated_at = null;
-          target.deactivated_reason = null;
+    // BE 연결됨 (AdminAccountController PATCH /v1/admin/account/{id}). VITE_USE_MOCK=true 면 mock.
+    mutationFn: isMockMode()
+      ? ({ id, payload }) => {
+          const target = mockAdmins.find((a) => a.id === id)!;
+          if (payload.name) target.name = payload.name;
+          if (payload.email) target.email = payload.email;
+          if (payload.phone) target.phone = payload.phone;
+          if (payload.role) target.role = payload.role;
+          if (payload.is_active !== undefined) {
+            target.is_active = payload.is_active;
+            if (!payload.is_active) {
+              target.deactivated_at = new Date().toISOString();
+              target.deactivated_reason = payload.deactivated_reason ?? null;
+            } else {
+              target.deactivated_at = null;
+              target.deactivated_reason = null;
+            }
+          }
+          target.update_time = new Date().toISOString();
+          return Promise.resolve(target);
         }
-      }
-      target.update_time = new Date().toISOString();
-      return Promise.resolve(target);
+      : ({ id, payload }) => accountBeApi.update(id, payload),
+    onSuccess: (...args) => {
+      qc.invalidateQueries({ queryKey: ['admins'] });
+      options?.onSuccess?.(...args);
     },
+  });
+}
+
+// 본인 비밀번호 변경 — BE 연결됨 (AdminAccountController PATCH /v1/admin/account/me/password).
+// mock 모드에서는 noop (성공). 실제 검증/변경은 BE 호출에서.
+export function useChangeMyPasswordMutation(
+  options?: MutationOpts<void, AdminPasswordChangeRequest>
+) {
+  return useMutation<void, NormalizedError, AdminPasswordChangeRequest>({
+    ...options,
+    mutationFn: isMockMode()
+      ? () => Promise.resolve()
+      : (payload) => accountBeApi.changeMyPassword(payload),
+  });
+}
+
+// 다른 관리자 비번 강제 변경 — PATCH /v1/admin/account/{id}/password (현재 비번 확인 없음).
+// 운영 사고 대응용. mock 모드에서는 noop.
+export function useForceChangeAdminPasswordMutation(
+  options?: MutationOpts<void, { id: number; payload: AdminPasswordResetRequest }>
+) {
+  return useMutation<
+    void,
+    NormalizedError,
+    { id: number; payload: AdminPasswordResetRequest }
+  >({
+    ...options,
+    mutationFn: isMockMode()
+      ? () => Promise.resolve()
+      : ({ id, payload }) => accountBeApi.forceChangePassword(id, payload),
+  });
+}
+
+// 관리자 계정 잠금 해제 — PATCH /v1/admin/account/{id}/unlock.
+// mock 모드에서는 mockAdmins 항목의 locked_until 을 null 로 만들고 반환.
+export function useUnlockAdminMutation(
+  options?: MutationOpts<AdminAccount, number>
+) {
+  const qc = useQueryClient();
+  return useMutation<AdminAccount, NormalizedError, number>({
+    ...options,
+    mutationFn: isMockMode()
+      ? (id) => {
+          const target = mockAdmins.find((a) => a.id === id);
+          if (target) target.locked_until = null;
+          return Promise.resolve(target ?? mockAdmins[0]);
+        }
+      : (id) => accountBeApi.unlock(id),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['admins'] });
       options?.onSuccess?.(...args);
