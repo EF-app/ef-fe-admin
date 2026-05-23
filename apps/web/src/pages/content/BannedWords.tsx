@@ -14,6 +14,7 @@ import FilterChips from '../../components/ui/FilterChips'
 import Pagination from '../../components/ui/Pagination'
 import EmptyState from '../../components/ui/EmptyState'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const SEVERITY_OPTIONS: { value: BannedWordSeverity | undefined; label: string }[] = [
   { value: undefined, label: '전체' },
@@ -128,6 +129,7 @@ export default function BannedWordsPage() {
 function WordRow({ word }: { word: BannedWord }) {
   const toggle = useToggleBannedWordMutation()
   const remove = useDeleteBannedWordMutation()
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   return (
     <tr>
       <td className="font-extrabold">{word.word}</td>
@@ -151,13 +153,26 @@ function WordRow({ word }: { word: BannedWord }) {
       <td>
         <button
           className="btn btn-danger btn-sm"
-          onClick={() => {
-            if (confirm(`"${word.word}" 을(를) 삭제할까요?`)) remove.mutate(word.id)
-          }}
+          onClick={() => setConfirmDeleteOpen(true)}
         >
           <Trash2 size={12} />
         </button>
       </td>
+      {confirmDeleteOpen && (
+        <td colSpan={0}>
+          <ConfirmDialog
+            title="금칙어를 삭제하시겠습니까?"
+            body={`"${word.word}" 항목이 영구 삭제됩니다.`}
+            confirmLabel="예, 삭제"
+            tone="danger"
+            pending={remove.isPending}
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={() =>
+              remove.mutate(word.id, { onSettled: () => setConfirmDeleteOpen(false) })
+            }
+          />
+        </td>
+      )}
     </tr>
   )
 }
@@ -173,17 +188,26 @@ function NewWordComposer({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState('욕설')
   const [severity, setSeverity] = useState<BannedWordSeverity>('BLOCK')
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const mutation = useCreateBannedWordMutation({
-    onSuccess: onClose,
-    onError: (e) => setError(e.message),
+    onSuccess: () => {
+      setConfirmOpen(false)
+      onClose()
+    },
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
 
-  const handleSubmit = () => {
+  const handleSubmitClick = () => {
     setError(null)
     if (!word.trim()) return setError('단어를 입력해주세요.')
     if (!category.trim()) return setError('카테고리를 입력해주세요.')
-    mutation.mutate({ word: word.trim(), category: category.trim(), severity, is_active: true })
+    setConfirmOpen(true)
   }
+  const executeSubmit = () =>
+    mutation.mutate({ word: word.trim(), category: category.trim(), severity, is_active: true })
 
   return (
     <div className="card mb-4 space-y-3">
@@ -235,12 +259,23 @@ function NewWordComposer({ onClose }: { onClose: () => void }) {
         </button>
         <button
           className="btn btn-primary btn-sm"
-          onClick={handleSubmit}
+          onClick={handleSubmitClick}
           disabled={mutation.isPending}
         >
           {mutation.isPending ? '저장 중...' : '추가'}
         </button>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="금칙어를 추가하시겠습니까?"
+          body={`"${word.trim()}" — 카테고리 ${category}, 처리: ${BANNED_WORD_SEVERITY_LABEL[severity]}`}
+          confirmLabel="예, 추가"
+          pending={mutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeSubmit}
+        />
+      )}
     </div>
   )
 }

@@ -55,6 +55,7 @@ import type {
   LoginDevice,
   LoginFailureReason,
   UserDetail as UserDetailType,
+  UserPhoto,
   PostItBe,
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
@@ -62,6 +63,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import Pagination from '../../components/ui/Pagination'
 import Modal from '../../components/ui/Modal'
 import { UserStatusBadge, Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import UserProfilePanel from '../../components/user/UserProfilePanel'
 
 const PAGE_SIZE = 10
@@ -105,6 +107,7 @@ export default function UserDetailPage() {
     onError: (e) => setError(e.message),
   })
   const cancelWithdrawalMutation = useCancelWithdrawalMutation()
+  const [confirmCancelWithdrawOpen, setConfirmCancelWithdrawOpen] = useState(false)
 
   const handleSuspend = () => {
     setError(null)
@@ -161,15 +164,7 @@ export default function UserDetailPage() {
       {user.is_withdraw && user.withdraw_date && (
         <WithdrawBanner
           withdrawDate={user.withdraw_date}
-          onCancel={() => {
-            if (
-              confirm(
-                '이 유저의 탈퇴 신청을 철회 처리합니다. 30일 유예가 종료되고 계정이 정상 복구됩니다. 계속할까요?'
-              )
-            ) {
-              if (userId != null) cancelWithdrawalMutation.mutate({ uuid: userId })
-            }
-          }}
+          onCancel={() => setConfirmCancelWithdrawOpen(true)}
           isPending={cancelWithdrawalMutation.isPending}
         />
       )}
@@ -312,6 +307,25 @@ export default function UserDetailPage() {
         userId={user.id}
         onClose={() => setProfileOpen(false)}
       />
+
+      {confirmCancelWithdrawOpen && (
+        <ConfirmDialog
+          title="탈퇴 신청을 철회 처리하시겠습니까?"
+          body="30일 유예가 종료되고 계정이 정상 복구됩니다."
+          confirmLabel="예, 철회"
+          tone="warn"
+          pending={cancelWithdrawalMutation.isPending}
+          onCancel={() => setConfirmCancelWithdrawOpen(false)}
+          onConfirm={() => {
+            if (userId != null) {
+              cancelWithdrawalMutation.mutate(
+                { uuid: userId },
+                { onSettled: () => setConfirmCancelWithdrawOpen(false) }
+              )
+            }
+          }}
+        />
+      )}
     </>
   )
 }
@@ -334,14 +348,8 @@ function ProfileSidebar({
     <aside className="lg:sticky lg:top-4 space-y-3">
       {/* 프로필 카드 */}
       <div className="card p-4">
-        <div className="flex flex-col items-center gap-3 pb-3 border-b border-border">
-          <div className="w-28 h-28 rounded-full bg-point text-white flex items-center justify-center font-black text-[44px] flex-shrink-0 overflow-hidden">
-            {user.photos && user.photos[0] ? (
-              <img src={user.photos[0].url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              user.nickname?.[0] ?? '?'
-            )}
-          </div>
+        <div className="flex flex-col gap-3 pb-3 border-b border-border">
+          <ProfilePhotoBlock photos={user.photos ?? []} nickname={user.nickname} />
           <div className="min-w-0 w-full text-center">
             <div className="font-extrabold text-[16px] truncate">{user.nickname}</div>
             <div className="flex items-center justify-center gap-1 flex-wrap mt-1.5">
@@ -424,6 +432,66 @@ function ProfileSidebar({
   )
 }
 
+/**
+ * 사이드바 사진 영역 — 큰 정사각형 메인 + 가로 썸네일 스트립.
+ * is_main = true 사진을 우선 노출. 사진 없으면 닉네임 이니셜 fallback.
+ */
+function ProfilePhotoBlock({
+  photos,
+  nickname,
+}: {
+  photos: UserPhoto[]
+  nickname?: string
+}) {
+  // is_main 우선, 동순위는 order_no 오름차순으로 정렬
+  const sorted = [...photos].sort((a, b) => {
+    if (a.is_main !== b.is_main) return a.is_main ? -1 : 1
+    return (a.order_no ?? 0) - (b.order_no ?? 0)
+  })
+  const [idx, setIdx] = useState(0)
+  const safeIdx = Math.min(idx, Math.max(0, sorted.length - 1))
+  const current = sorted[safeIdx]
+
+  if (sorted.length === 0) {
+    return (
+      <div className="w-full aspect-square rounded-lg bg-point text-white flex items-center justify-center font-black text-[64px] overflow-hidden">
+        {nickname?.[0] ?? '?'}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="w-full aspect-square rounded-lg overflow-hidden bg-surface-alt">
+        <img
+          src={current.url}
+          alt=""
+          className="w-full h-full object-cover transition-opacity"
+        />
+      </div>
+      {sorted.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto">
+          {sorted.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setIdx(i)}
+              className={`flex-shrink-0 w-12 h-12 rounded-md overflow-hidden border-2 transition ${
+                i === safeIdx
+                  ? 'border-point ring-1 ring-point/30'
+                  : 'border-transparent opacity-70 hover:opacity-100'
+              }`}
+              title={p.is_main ? '대표 사진' : `사진 ${i + 1}`}
+            >
+              <img src={p.url} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SidebarRow({
   label,
   value,
@@ -476,7 +544,7 @@ function SidebarStat({
 }
 
 /* ===== 우측 메인 — 상단 탭 ===== */
-type MainTab = 'matches' | 'content' | 'access' | 'reports'
+type MainTab = 'matches' | 'content' | 'access' | 'reports' | 'blocks'
 
 function MainContent({
   user,
@@ -488,6 +556,10 @@ function MainContent({
   const [tab, setTab] = useState<MainTab>('matches')
 
   const matchCount = user.recent_matches?.length ?? 0
+  const reports = user.recent_reports ?? []
+  const madeReports = user.recent_made_reports ?? []
+  const blocks = user.blocks ?? []
+  const blockedBy = user.blocked_by ?? []
 
   return (
     <div className="card p-0">
@@ -515,7 +587,15 @@ function MainContent({
           active={tab === 'reports'}
           onClick={() => setTab('reports')}
           icon={<AlertTriangle size={14} />}
-          label="신고·차단"
+          label="신고"
+          suffix={`(${reports.length + madeReports.length})`}
+        />
+        <TopTab
+          active={tab === 'blocks'}
+          onClick={() => setTab('blocks')}
+          icon={<UserX size={14} />}
+          label="차단"
+          suffix={`(${blocks.length + blockedBy.length})`}
         />
       </div>
 
@@ -533,12 +613,10 @@ function MainContent({
           />
         )}
         {tab === 'reports' && (
-          <ReportAndBlockTabs
-            reports={user.recent_reports ?? []}
-            madeReports={user.recent_made_reports ?? []}
-            blocks={user.blocks ?? []}
-            blockedBy={user.blocked_by ?? []}
-          />
+          <ReportTabs reports={reports} madeReports={madeReports} />
+        )}
+        {tab === 'blocks' && (
+          <BlockTabs blocks={blocks} blockedBy={blockedBy} />
         )}
       </div>
     </div>
@@ -973,6 +1051,7 @@ function PostItList({
     p.content.toLowerCase().includes(kw)
   )
   const hideMutation = useHidePostItBeMutation()
+  const [confirmHideId, setConfirmHideId] = useState<number | null>(null)
 
   return (
     <>
@@ -1012,11 +1091,7 @@ function PostItList({
                           type="button"
                           className="btn btn-danger btn-sm"
                           disabled={hideMutation.isPending}
-                          onClick={() => {
-                            if (confirm('이 포스트잇을 숨김 처리할까요?')) {
-                              hideMutation.mutate({ id: p.id })
-                            }
-                          }}
+                          onClick={() => setConfirmHideId(p.id)}
                         >
                           <EyeOff size={12} /> 숨김
                         </button>
@@ -1041,6 +1116,23 @@ function PostItList({
         )}
       </ScrollBox>
       <Pagination page={pager.page} totalPages={pager.totalPages} onChange={pager.setPage} />
+
+      {confirmHideId != null && (
+        <ConfirmDialog
+          title="포스트잇을 숨김 처리하시겠습니까?"
+          body="유저 화면에서 즉시 가려집니다."
+          confirmLabel="예, 숨김"
+          tone="danger"
+          pending={hideMutation.isPending}
+          onCancel={() => setConfirmHideId(null)}
+          onConfirm={() =>
+            hideMutation.mutate(
+              { id: confirmHideId },
+              { onSettled: () => setConfirmHideId(null) }
+            )
+          }
+        />
+      )}
     </>
   )
 }
@@ -1170,33 +1262,50 @@ function AccessAndSuspensionTabs({
   )
 }
 
-/* ===== 안전 — 신고 + 차단 ===== */
-function ReportAndBlockTabs({
+/* ===== 신고 — 받은 + 낸 ===== */
+function ReportTabs({
   reports,
   madeReports,
-  blocks,
-  blockedBy,
 }: {
   reports: RecentReports
   madeReports: MadeReports
-  blocks: Blocks
-  blockedBy: BlockedBy
 }) {
-  const [tab, setTab] = useState<'rep' | 'made' | 'blk' | 'bby'>('rep')
+  const [tab, setTab] = useState<'rep' | 'made'>('rep')
   return (
     <>
       <InnerTabs
         tabs={[
           { value: 'rep', label: `받은 신고 (${reports.length})`, icon: <AlertTriangle size={12} /> },
           { value: 'made', label: `낸 신고 (${madeReports.length})`, icon: <Send size={12} /> },
-          { value: 'blk', label: `차단한 (${blocks.length})`, icon: <UserX size={12} /> },
-          { value: 'bby', label: `차단당한 (${blockedBy.length})`, icon: <UserMinus size={12} /> },
         ]}
         active={tab}
         onChange={setTab}
       />
       {tab === 'rep' && <ReceivedReportList items={reports} />}
       {tab === 'made' && <MadeReportList items={madeReports} />}
+    </>
+  )
+}
+
+/* ===== 차단 — 차단한 + 차단당한 ===== */
+function BlockTabs({
+  blocks,
+  blockedBy,
+}: {
+  blocks: Blocks
+  blockedBy: BlockedBy
+}) {
+  const [tab, setTab] = useState<'blk' | 'bby'>('blk')
+  return (
+    <>
+      <InnerTabs
+        tabs={[
+          { value: 'blk', label: `차단한 (${blocks.length})`, icon: <UserX size={12} /> },
+          { value: 'bby', label: `차단당한 (${blockedBy.length})`, icon: <UserMinus size={12} /> },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
       {tab === 'blk' && <BlockedUsersList items={blocks} />}
       {tab === 'bby' && <BlockedByList items={blockedBy} />}
     </>

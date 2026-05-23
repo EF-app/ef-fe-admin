@@ -6,6 +6,7 @@ import {
 } from '@ef-fe-admin/shared'
 import type { UpdateMatchingWeightsRequest } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const WEIGHT_FIELDS: { key: keyof UpdateMatchingWeightsRequest; label: string; hint: string }[] = [
   { key: 'age_weight', label: '나이 일치', hint: '비슷한 나이대 가산점' },
@@ -22,6 +23,7 @@ export default function MatchingRatesPage() {
   const [form, setForm] = useState<UpdateMatchingWeightsRequest | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (data && !form) {
@@ -42,9 +44,13 @@ export default function MatchingRatesPage() {
   const mutation = useUpdateMatchingWeightsMutation({
     onSuccess: () => {
       setSaved('저장되었습니다.')
+      setConfirmOpen(false)
       setTimeout(() => setSaved(null), 2400)
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
 
   if (isLoading || !form) {
@@ -67,16 +73,15 @@ export default function MatchingRatesPage() {
 
   const normalizedOK = Math.abs(weightSum - 1) < 0.01
 
-  const handleSave = () => {
+  const handleSaveClick = () => {
     setError(null)
     if (!normalizedOK) {
-      setError(
-        `가중치 합계가 1.00 이어야 합니다. 현재 ${weightSum.toFixed(2)}`
-      )
+      setError(`가중치 합계가 1.00 이어야 합니다. 현재 ${weightSum.toFixed(2)}`)
       return
     }
-    mutation.mutate(form)
+    setConfirmOpen(true)
   }
+  const executeSave = () => mutation.mutate(form)
 
   return (
     <>
@@ -175,12 +180,24 @@ export default function MatchingRatesPage() {
         </div>
         <button
           className="btn btn-primary btn-sm"
-          onClick={handleSave}
+          onClick={handleSaveClick}
           disabled={mutation.isPending}
         >
           {mutation.isPending ? '저장 중...' : '저장'}
         </button>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="가중치를 저장하시겠습니까?"
+          body="모든 신규 매칭 점수 계산에 즉시 반영됩니다."
+          confirmLabel="예, 저장"
+          tone="warn"
+          pending={mutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeSave}
+        />
+      )}
     </>
   )
 }

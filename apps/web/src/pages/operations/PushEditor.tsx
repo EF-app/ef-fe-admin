@@ -28,6 +28,7 @@ import type {
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const TARGETS: { value: PushTarget; label: string; desc: string }[] = [
   { value: 'ALL', label: '전체', desc: '모든 활성 유저' },
@@ -82,6 +83,10 @@ export default function PushEditorPage() {
   const [error, setError] = useState<string | null>(null)
   const [pendingMode, setPendingMode] = useState<
     'DRAFT' | 'SCHEDULED' | 'SENT' | null
+  >(null)
+  // 확인 팝업 상태 — DRAFT 는 confirm 없음, SCHEDULED/SENT(즉시발송)/SEND_NOW(예약→즉시)/CANCEL(예약취소) 만
+  const [confirmKind, setConfirmKind] = useState<
+    'SCHEDULED' | 'SENT' | 'SEND_NOW' | 'CANCEL' | null
   >(null)
 
   // 기존 푸시 로드 (상세 — readOnly)
@@ -493,7 +498,7 @@ export default function PushEditorPage() {
             <button
               className="btn btn-secondary btn-sm"
               disabled={pending || !hasScheduleInputs}
-              onClick={() => handleSubmit('SCHEDULED')}
+              onClick={() => setConfirmKind('SCHEDULED')}
               title={!hasScheduleInputs ? '예약 시각을 먼저 선택하세요' : ''}
             >
               <Clock size={13} /> 예약 발송
@@ -501,14 +506,7 @@ export default function PushEditorPage() {
             <button
               className="btn btn-primary btn-sm"
               disabled={pending}
-              onClick={() => {
-                if (
-                  confirm(
-                    `지금 즉시 발송합니다. (예상 ${formatNumber(estimateCount(target))}명)\n계속할까요?`
-                  )
-                )
-                  handleSubmit('SENT')
-              }}
+              onClick={() => setConfirmKind('SENT')}
             >
               <Send size={13} />{' '}
               {pendingMode === 'SENT' ? '발송 중...' : '지금 발송'}
@@ -523,27 +521,78 @@ export default function PushEditorPage() {
           <button
             className="btn btn-secondary btn-sm"
             disabled={cancelMutation.isPending}
-            onClick={() => {
-              if (confirm('예약을 취소할까요?')) cancelMutation.mutate({ id: existing.id })
-            }}
+            onClick={() => setConfirmKind('CANCEL')}
           >
             예약 취소
           </button>
           <button
             className="btn btn-primary btn-sm"
             disabled={sendNowMutation.isPending}
-            onClick={() => {
-              if (
-                confirm(
-                  `예약 푸시를 지금 즉시 발송할까요? (예상 ${formatNumber(existing.targetCount)}명)`
-                )
-              )
-                sendNowMutation.mutate({ id: existing.id })
-            }}
+            onClick={() => setConfirmKind('SEND_NOW')}
           >
             <Send size={13} /> 즉시 발송
           </button>
         </div>
+      )}
+
+      {confirmKind === 'SCHEDULED' && (
+        <ConfirmDialog
+          title="예약 발송하시겠습니까?"
+          body={`예약 시각에 자동 발송됩니다. (예상 ${formatNumber(estimateCount(target))}명)`}
+          confirmLabel="예, 예약"
+          pending={pending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => {
+            setConfirmKind(null)
+            handleSubmit('SCHEDULED')
+          }}
+        />
+      )}
+      {confirmKind === 'SENT' && (
+        <ConfirmDialog
+          title="지금 즉시 발송하시겠습니까?"
+          body={`발송 후 취소할 수 없습니다. (예상 ${formatNumber(estimateCount(target))}명)`}
+          confirmLabel="예, 발송"
+          tone="danger"
+          pending={pending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => {
+            setConfirmKind(null)
+            handleSubmit('SENT')
+          }}
+        />
+      )}
+      {confirmKind === 'SEND_NOW' && existing && (
+        <ConfirmDialog
+          title="예약 푸시를 지금 발송하시겠습니까?"
+          body={`예약을 무시하고 즉시 발송됩니다. (예상 ${formatNumber(existing.targetCount)}명)`}
+          confirmLabel="예, 발송"
+          tone="danger"
+          pending={sendNowMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => {
+            sendNowMutation.mutate(
+              { id: existing.id },
+              { onSettled: () => setConfirmKind(null) }
+            )
+          }}
+        />
+      )}
+      {confirmKind === 'CANCEL' && existing && (
+        <ConfirmDialog
+          title="예약을 취소하시겠습니까?"
+          body="이 푸시는 예약된 시각에 발송되지 않습니다."
+          confirmLabel="예, 취소"
+          tone="warn"
+          pending={cancelMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => {
+            cancelMutation.mutate(
+              { id: existing.id },
+              { onSettled: () => setConfirmKind(null) }
+            )
+          }}
+        />
       )}
     </>
   )

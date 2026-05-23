@@ -23,10 +23,7 @@ import { suspensionLogsApi } from '../api/suspensionLogs';
 import { postItsApi } from '../api/postIts';
 import { feedbackBeApi } from '../api/feedbackBe';
 import { accountBeApi } from '../api/accountBe';
-import type {
-  AdminPasswordChangeRequest,
-  AdminPasswordResetRequest,
-} from '../api/accountBe';
+import type { AdminPasswordResetRequest } from '../api/accountBe';
 import type {
   AdminAccount,
   LoginRequest,
@@ -179,10 +176,10 @@ import { ADMIN_ROLE } from '../constants/enums';
 
 /**
  * BE 로그인/me 응답을 FE 의 AdminAccount 모양으로 변환.
- * BE 의 AdminLoginRspDto / AdminInfoRspDto 는 role 을 내려주지 않고
+ * BE 의 AdminLoginRspDto / AdminInfoRspDto 는 role/id 를 내려주지 않고
  * 모든 관리자에게 단일 ROLE_ADMIN 권한이 JWT claim 으로만 박힘.
- * 따라서 FE 측에서는 role 을 ADMIN_ROLE.ADMIN 으로 하드코딩한다.
- * 향후 BE 가 응답 DTO 에 role 을 추가하면 인자로 받아 normalize 하는 가드 추가 예정.
+ * 따라서 FE 측에서는 role 을 ADMIN_ROLE.ADMIN, id 는 0 sentinel 로 채운다.
+ * (관리자 본인 식별은 audit 자동 스탬핑이 JWT 의 id 로 처리하므로 FE 노출 불필요)
  */
 function adminAccountFromBe(be: {
   loginId: string;
@@ -1261,19 +1258,6 @@ export function useUpdateAdminMutation(
       qc.invalidateQueries({ queryKey: ['admins'] });
       options?.onSuccess?.(...args);
     },
-  });
-}
-
-// 본인 비밀번호 변경 — BE 연결됨 (AdminAccountController PATCH /v1/admin/account/me/password).
-// mock 모드에서는 noop (성공). 실제 검증/변경은 BE 호출에서.
-export function useChangeMyPasswordMutation(
-  options?: MutationOpts<void, AdminPasswordChangeRequest>
-) {
-  return useMutation<void, NormalizedError, AdminPasswordChangeRequest>({
-    ...options,
-    mutationFn: isMockMode()
-      ? () => Promise.resolve()
-      : (payload) => accountBeApi.changeMyPassword(payload),
   });
 }
 

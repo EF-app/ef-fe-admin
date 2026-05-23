@@ -100,6 +100,9 @@ input, select, textarea {
   .btn-danger {
     @apply bg-surface text-danger border-border-strong hover:bg-danger-soft hover:border-danger;
   }
+  .btn-warn {
+    @apply bg-surface text-warn border-border-strong hover:bg-surface-alt hover:border-warn;
+  }
   .btn-success {
     @apply bg-success text-white hover:opacity-90;
   }

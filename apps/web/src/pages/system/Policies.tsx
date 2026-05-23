@@ -33,6 +33,7 @@ import FilterChips from '../../components/ui/FilterChips'
 import Pagination from '../../components/ui/Pagination'
 import EmptyState from '../../components/ui/EmptyState'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 type Tab = 'policy' | 'faq'
 
@@ -356,6 +357,7 @@ function FaqTab() {
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [page, setPage] = useState(0)
   const deleteMutation = useDeleteFaqMutation()
+  const [confirmDeleteFaq, setConfirmDeleteFaq] = useState<{ id: number; question: string } | null>(null)
 
   const { data, isLoading } = useFaqs({
     category,
@@ -455,10 +457,7 @@ function FaqTab() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <button
                       className="btn btn-danger btn-sm"
-                      onClick={() => {
-                        if (confirm(`"${f.question}" FAQ 를 삭제할까요?`))
-                          deleteMutation.mutate(f.id)
-                      }}
+                      onClick={() => setConfirmDeleteFaq({ id: f.id, question: f.question })}
                     >
                       삭제
                     </button>
@@ -471,6 +470,22 @@ function FaqTab() {
       </div>
 
       <Pagination page={page} totalPages={data?.totalPages ?? 0} onChange={setPage} />
+
+      {confirmDeleteFaq && (
+        <ConfirmDialog
+          title="FAQ 를 삭제하시겠습니까?"
+          body={`"${confirmDeleteFaq.question}" 항목이 영구 삭제됩니다.`}
+          confirmLabel="예, 삭제"
+          tone="danger"
+          pending={deleteMutation.isPending}
+          onCancel={() => setConfirmDeleteFaq(null)}
+          onConfirm={() =>
+            deleteMutation.mutate(confirmDeleteFaq.id, {
+              onSettled: () => setConfirmDeleteFaq(null),
+            })
+          }
+        />
+      )}
     </>
   )
 }

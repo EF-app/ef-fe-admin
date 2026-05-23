@@ -13,6 +13,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import Pagination from '../../components/ui/Pagination'
 import UserProfilePanel from '../../components/user/UserProfilePanel'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function ProfileReviewsPage() {
   const [page, setPage] = useState(0)
@@ -94,21 +95,34 @@ function ProfileReviewSidePanel({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [boostNote, setBoostNote] = useState<string | null>(null)
+  const [confirmKind, setConfirmKind] = useState<'approve' | 'reject' | null>(null)
 
   const approve = useApproveProfileMutation({
-    onSuccess: onClose,
-    onError: (e) => setError(e.message),
+    onSuccess: () => {
+      setConfirmKind(null)
+      onClose()
+    },
+    onError: (e) => {
+      setError(e.message)
+      setConfirmKind(null)
+    },
   })
   const reject = useRejectProfileMutation({
-    onSuccess: onClose,
-    onError: (e) => setError(e.message),
+    onSuccess: () => {
+      setConfirmKind(null)
+      onClose()
+    },
+    onError: (e) => {
+      setError(e.message)
+      setConfirmKind(null)
+    },
   })
 
-  const handleReject = () => {
+  const handleRejectClick = () => {
     setError(null)
     const check = validators.rejectionReason(reason)
     if (!check.valid) return setError(check.message ?? '')
-    reject.mutate({ userUuid: user.uuid, reason })
+    setConfirmKind('reject')
   }
 
   const handleBoost = () => {
@@ -145,7 +159,7 @@ function ProfileReviewSidePanel({
             </button>
             <button
               className="btn btn-danger btn-sm"
-              onClick={handleReject}
+              onClick={handleRejectClick}
               disabled={reject.isPending}
             >
               {reject.isPending ? '처리 중...' : '반려'}
@@ -170,12 +184,33 @@ function ProfileReviewSidePanel({
           </button>
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => approve.mutate(user.uuid)}
+            onClick={() => setConfirmKind('approve')}
             disabled={approve.isPending}
           >
             {approve.isPending ? '처리 중...' : '승인'}
           </button>
         </div>
+      )}
+      {confirmKind === 'approve' && (
+        <ConfirmDialog
+          title="프로필을 승인하시겠습니까?"
+          body={`@${user.nickname ?? user.uuid} 의 프로필이 정상 노출됩니다.`}
+          confirmLabel="예, 승인"
+          pending={approve.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => approve.mutate(user.uuid)}
+        />
+      )}
+      {confirmKind === 'reject' && (
+        <ConfirmDialog
+          title="프로필을 반려하시겠습니까?"
+          body="반려 사유가 유저에게 노출됩니다."
+          confirmLabel="예, 반려"
+          tone="danger"
+          pending={reject.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => reject.mutate({ userUuid: user.uuid, reason })}
+        />
       )}
     </div>
   )

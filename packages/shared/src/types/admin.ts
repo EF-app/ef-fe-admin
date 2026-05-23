@@ -16,6 +16,8 @@ export interface AdminAccount {
   is_active: boolean;
   /** 비밀번호 실패 누적으로 잠긴 시각 — null 또는 미래 시각 아님 = 잠금 아님 */
   locked_until?: string | null;
+  /** 최근 1시간 내 비밀번호 실패 횟수 (5회 임계 → 1시간 잠금) */
+  recent_password_failure_count?: number;
   deactivated_at: string | null;
   deactivated_reason: string | null;
   last_login_at: string | null;

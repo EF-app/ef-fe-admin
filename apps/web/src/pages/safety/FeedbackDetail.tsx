@@ -13,6 +13,7 @@ import {
 import type { FeedbackStatus, FeedbackType } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function FeedbackDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,6 +26,7 @@ export default function FeedbackDetailPage() {
   const [memo, setMemo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (feedback) {
@@ -38,15 +40,23 @@ export default function FeedbackDetailPage() {
   const updateMutation = useUpdateFeedbackMutation({
     onSuccess: () => {
       setSaved(true)
+      setConfirmOpen(false)
       setTimeout(() => setSaved(false), 2500)
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
 
-  const handleSubmit = () => {
+  const handleSubmitClick = () => {
     if (!feedback) return
     setError(null)
     setSaved(false)
+    setConfirmOpen(true)
+  }
+  const executeSubmit = () => {
+    if (!feedback) return
     // 빈 문자열도 그대로 전송 — 답변/메모를 비우는 수정이 가능하도록
     updateMutation.mutate({
       id: feedback.id,
@@ -186,13 +196,24 @@ export default function FeedbackDetailPage() {
           </button>
           <button
             className="btn btn-primary btn-sm"
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
             disabled={updateMutation.isPending}
           >
             {updateMutation.isPending ? '저장 중...' : '저장'}
           </button>
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="저장하시겠습니까?"
+          body="처리 상태·답변·메모를 저장합니다."
+          confirmLabel="예, 저장"
+          pending={updateMutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeSubmit}
+        />
+      )}
 
       {/* 저장 완료 팝업 — 2.5초 후 자동 사라짐 */}
       {saved && (

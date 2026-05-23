@@ -36,6 +36,7 @@ import Pagination from '../../components/ui/Pagination'
 import EmptyState from '../../components/ui/EmptyState'
 import Modal from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const CATEGORY_OPTIONS: { value: PostItCategory | undefined; label: string }[] = [
   { value: undefined, label: '전체' },
@@ -354,6 +355,8 @@ function PostItDetailModal({
   const navigate = useNavigate()
   const [confirmMode, setConfirmMode] = useState<'hide' | 'restore' | null>(null)
   const [hideReason, setHideReason] = useState('')
+  // 마지막 [확정] 클릭 후 띄우는 통일 ConfirmDialog
+  const [finalConfirmOpen, setFinalConfirmOpen] = useState(false)
   const [suspendOpen, setSuspendOpen] = useState(false)
   // 모달도 익명 글은 기본 숨김. 토글로 작성자 노출
   const [revealAuthor, setRevealAuthor] = useState(false)
@@ -493,12 +496,7 @@ function PostItDetailModal({
                     <button
                       className="btn btn-danger btn-sm"
                       disabled={hideMutation.isPending}
-                      onClick={() =>
-                        hideMutation.mutate({
-                          id: post.id,
-                          reason: hideReason || undefined,
-                        })
-                      }
+                      onClick={() => setFinalConfirmOpen(true)}
                     >
                       숨김 확정
                     </button>
@@ -506,7 +504,7 @@ function PostItDetailModal({
                 </div>
               )}
 
-              {/* 숨김 해제 확인 */}
+              {/* 숨김 해제 — 사유 입력 없음, 바로 ConfirmDialog 띄움 */}
               {confirmMode === 'restore' && (
                 <div className="bg-point-softer rounded-md p-3 space-y-3">
                   <div className="text-[12.5px] font-extrabold">
@@ -522,7 +520,7 @@ function PostItDetailModal({
                     <button
                       className="btn btn-primary btn-sm"
                       disabled={restoreMutation.isPending}
-                      onClick={() => restoreMutation.mutate(post.id)}
+                      onClick={() => setFinalConfirmOpen(true)}
                     >
                       해제 확정
                     </button>
@@ -568,6 +566,42 @@ function PostItDetailModal({
           isAnonymous={post.anonymous}
           onClose={() => setSuspendOpen(false)}
           onDone={onClose}
+        />
+      )}
+
+      {finalConfirmOpen && confirmMode === 'hide' && (
+        <ConfirmDialog
+          title="포스트잇을 숨김 처리하시겠습니까?"
+          body={
+            hideReason
+              ? `사유: ${hideReason}`
+              : '사유 없이 즉시 숨김 처리됩니다.'
+          }
+          confirmLabel="예, 숨김"
+          tone="danger"
+          pending={hideMutation.isPending}
+          onCancel={() => setFinalConfirmOpen(false)}
+          onConfirm={() =>
+            hideMutation.mutate(
+              { id: post.id, reason: hideReason || undefined },
+              { onSettled: () => setFinalConfirmOpen(false) }
+            )
+          }
+        />
+      )}
+      {finalConfirmOpen && confirmMode === 'restore' && (
+        <ConfirmDialog
+          title="숨김을 해제하시겠습니까?"
+          body="글이 다시 노출되고 신고 누적 카운트가 0으로 리셋됩니다."
+          confirmLabel="예, 해제"
+          tone="warn"
+          pending={restoreMutation.isPending}
+          onCancel={() => setFinalConfirmOpen(false)}
+          onConfirm={() =>
+            restoreMutation.mutate(post.id, {
+              onSettled: () => setFinalConfirmOpen(false),
+            })
+          }
         />
       )}
     </>

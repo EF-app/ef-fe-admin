@@ -11,6 +11,7 @@ import {
 import type { PolicyKind, PolicyStatus, PolicyDoc } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const KINDS: PolicyKind[] = [
   'TERMS_AGREE',
@@ -106,6 +107,8 @@ export default function PolicyEditorPage() {
   const [effectiveDate, setEffectiveDate] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // confirm: 'NOW'/'SCHEDULED' 만 띄움. DRAFT 는 마찰 없이 바로 저장.
+  const [confirmMode, setConfirmMode] = useState<'SCHEDULED' | 'NOW' | null>(null)
   const [activateAfterCreate, setActivateAfterCreate] = useState<
     'DRAFT' | 'SCHEDULED' | 'NOW'
   >('DRAFT')
@@ -483,7 +486,7 @@ export default function PolicyEditorPage() {
             </button>
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => handleSubmit('SCHEDULED')}
+              onClick={() => setConfirmMode('SCHEDULED')}
               disabled={submitting}
               title="활성으로 저장하되, 발효일이 미래라면 예약 상태로 노출됩니다."
             >
@@ -491,16 +494,7 @@ export default function PolicyEditorPage() {
             </button>
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => {
-                if (
-                  confirm(
-                    splitView
-                      ? `'${version}' 버전을 지금 활성화하면 같은 타입의 다른 활성 버전은 자동으로 비활성화됩니다.\n계속할까요?`
-                      : `'${version}' 버전을 지금 활성화할까요?`
-                  )
-                )
-                  handleSubmit('NOW')
-              }}
+              onClick={() => setConfirmMode('NOW')}
               disabled={submitting}
               title="지금 활성화하고 같은 타입의 이전 활성 버전을 자동 비활성화합니다."
             >
@@ -510,6 +504,28 @@ export default function PolicyEditorPage() {
           </div>
         </section>
       </div>
+
+      {confirmMode && (
+        <ConfirmDialog
+          title={confirmMode === 'NOW' ? '지금 활성화하시겠습니까?' : '예약 활성화하시겠습니까?'}
+          body={
+            confirmMode === 'NOW'
+              ? splitView
+                ? `'${version}' 버전을 지금 활성화합니다. 같은 타입의 다른 활성 버전은 자동으로 비활성화됩니다.`
+                : `'${version}' 버전을 지금 활성화합니다.`
+              : `'${version}' 버전을 활성으로 저장합니다. 발효일이 미래라면 예약 상태로 노출됩니다.`
+          }
+          confirmLabel={confirmMode === 'NOW' ? '예, 활성화' : '예, 예약'}
+          tone={confirmMode === 'NOW' ? 'warn' : 'primary'}
+          pending={submitting}
+          onCancel={() => setConfirmMode(null)}
+          onConfirm={async () => {
+            const mode = confirmMode
+            setConfirmMode(null)
+            await handleSubmit(mode)
+          }}
+        />
+      )}
     </>
   )
 }

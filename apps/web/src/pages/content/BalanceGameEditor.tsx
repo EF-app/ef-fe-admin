@@ -18,6 +18,7 @@ import type {
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import CommonConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = [0, 10, 20, 30, 40, 50]
@@ -72,6 +73,12 @@ export default function BalanceGameEditorPage() {
   const [pendingPayload, setPendingPayload] = useState<BalGameCreateRequest | null>(null)
   // 상태 변경 (게시 중·숨김 게임 한정) — 미리보기/입력 영역은 readOnly 라도 상태 전환은 가능.
   const [pendingStatusChange, setPendingStatusChange] = useState<BalGameBeStatus | null>(null)
+  // 일정만 저장 확인 팝업
+  const [scheduleConfirmOpen, setScheduleConfirmOpen] = useState(false)
+  const [scheduleConfirmPayload, setScheduleConfirmPayload] = useState<{
+    scheduledAt: string | null
+    scheduledEndAt: string | null
+  } | null>(null)
 
   // 기존 게임 로드 시 프리필
   useEffect(() => {
@@ -206,7 +213,7 @@ export default function BalanceGameEditorPage() {
 
   // 게시 중/숨김 게임에서 일정(예약·자동종료) 만 따로 저장.
   // 내용 변경은 잠겨도 일정은 운영 중에 조정해야 하는 케이스 (자동 종료 시각 추가 등).
-  const handleSaveSchedule = () => {
+  const handleSaveScheduleClick = () => {
     if (!isEdit || gameId == null) return
     setError(null)
     const scheduledIso = hasScheduleInputs
@@ -226,13 +233,20 @@ export default function BalanceGameEditorPage() {
       setError('자동 종료 시각은 현재 시각 이후여야 합니다.')
       return
     }
-    updateMutation.mutate({
-      gameId: gameId!,
-      payload: {
-        scheduledAt: scheduledIso,
-        scheduledEndAt: endIso,
-      },
-    })
+    setScheduleConfirmPayload({ scheduledAt: scheduledIso, scheduledEndAt: endIso })
+    setScheduleConfirmOpen(true)
+  }
+  const executeSaveSchedule = () => {
+    if (gameId == null || !scheduleConfirmPayload) return
+    updateMutation.mutate(
+      { gameId, payload: scheduleConfirmPayload },
+      {
+        onSettled: () => {
+          setScheduleConfirmOpen(false)
+          setScheduleConfirmPayload(null)
+        },
+      }
+    )
   }
 
   const executeSubmit = () => {
@@ -441,7 +455,7 @@ export default function BalanceGameEditorPage() {
               <button
                 className="btn btn-primary btn-sm"
                 disabled={updateMutation.isPending}
-                onClick={handleSaveSchedule}
+                onClick={handleSaveScheduleClick}
               >
                 <Save size={13} />{' '}
                 {updateMutation.isPending ? '저장 중...' : '일정 저장'}
@@ -557,6 +571,21 @@ export default function BalanceGameEditorPage() {
           pending={pending}
           onCancel={() => setPendingPayload(null)}
           onConfirm={executeSubmit}
+        />
+      )}
+
+      {scheduleConfirmOpen && (
+        <CommonConfirmDialog
+          title="일정을 저장하시겠습니까?"
+          body="운영 중인 게임의 예약·자동종료 시각이 즉시 반영됩니다."
+          confirmLabel="예, 저장"
+          tone="warn"
+          pending={updateMutation.isPending}
+          onCancel={() => {
+            setScheduleConfirmOpen(false)
+            setScheduleConfirmPayload(null)
+          }}
+          onConfirm={executeSaveSchedule}
         />
       )}
 
@@ -1006,6 +1035,9 @@ function DateTime10Picker({
   )
 }
 
+/**
+ * 신규 등록/수정 시 발행 모드별 확인 다이얼로그. 공용 ConfirmDialog 를 감싸 메타 테이블만 추가.
+ */
 function ConfirmDialog({
   payload,
   pending,
@@ -1022,76 +1054,66 @@ function ConfirmDialog({
     status === 'DRAFT'
       ? {
           title: '초안으로 저장하시겠습니까?',
-          body: '게시되지 않고, 이후에 다시 열어서 예약/즉시 발행할 수 있습니다.',
-          tone: 'secondary' as const,
-          label: '초안 저장',
+          description: '게시되지 않고, 이후에 다시 열어서 예약/즉시 발행할 수 있습니다.',
+          tone: 'primary' as const,
+          label: '예, 초안 저장',
         }
       : status === 'SCHEDULED'
         ? {
             title: '예약 발행하시겠습니까?',
-            body: `${payload.scheduledAt?.slice(0, 16).replace('T', ' ')} 에 자동 게시됩니다.`,
+            description: `${payload.scheduledAt?.slice(0, 16).replace('T', ' ')} 에 자동 게시됩니다.`,
             tone: 'primary' as const,
-            label: '예약',
+            label: '예, 예약',
           }
         : {
             title: '지금 즉시 발행하시겠습니까?',
-            body: '발행되는 즉시 유저에게 노출되고 투표가 시작됩니다.',
-            tone: 'primary' as const,
-            label: '발행',
+            description: '발행되는 즉시 유저에게 노출되고 투표가 시작됩니다.',
+            tone: 'danger' as const,
+            label: '예, 발행',
           }
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(43,39,48,0.5)] backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-surface rounded-xl shadow-lg p-6 w-full max-w-[460px] mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-[17px] font-extrabold mb-2">{meta.title}</div>
-        <div className="text-[13px] text-text-sub leading-relaxed mb-4">{meta.body}</div>
-        <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1 mb-5">
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">A</span>
-            <span className="font-bold">
-              {payload.optionAEmoji ?? ''} {payload.optionA}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">B</span>
-            <span className="font-bold">
-              {payload.optionBEmoji ?? ''} {payload.optionB}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">카테고리</span>
-            <span>{BAL_BE_CATEGORY_LABEL[payload.categoryCode]}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">상태</span>
-            <span>{BAL_GAME_BE_STATUS_LABEL[status]}</span>
-          </div>
-          {payload.scheduledEndAt && (
-            <div className="flex justify-between">
-              <span className="text-text-soft font-bold">자동 종료</span>
-              <span>{payload.scheduledEndAt.slice(0, 16).replace('T', ' ')}</span>
-            </div>
-          )}
+  const body = (
+    <>
+      <div className="mb-4">{meta.description}</div>
+      <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1">
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">A</span>
+          <span className="font-bold">
+            {payload.optionAEmoji ?? ''} {payload.optionA}
+          </span>
         </div>
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={pending}>
-            취소
-          </button>
-          <button
-            className={`btn btn-sm ${meta.tone === 'primary' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={onConfirm}
-            disabled={pending}
-          >
-            {pending ? '처리 중...' : meta.label}
-          </button>
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">B</span>
+          <span className="font-bold">
+            {payload.optionBEmoji ?? ''} {payload.optionB}
+          </span>
         </div>
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">카테고리</span>
+          <span>{BAL_BE_CATEGORY_LABEL[payload.categoryCode]}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">상태</span>
+          <span>{BAL_GAME_BE_STATUS_LABEL[status]}</span>
+        </div>
+        {payload.scheduledEndAt && (
+          <div className="flex justify-between">
+            <span className="text-text-soft font-bold">자동 종료</span>
+            <span>{payload.scheduledEndAt.slice(0, 16).replace('T', ' ')}</span>
+          </div>
+        )}
       </div>
-    </div>
+    </>
+  )
+  return (
+    <CommonConfirmDialog
+      title={meta.title}
+      body={body}
+      confirmLabel={meta.label}
+      tone={meta.tone}
+      pending={pending}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   )
 }
 
@@ -1119,63 +1141,48 @@ function StatusChangeDialog({
     target === 'PUBLISHED'
       ? {
           title: '다시 게시하시겠습니까?',
-          body: '유저 화면에 다시 노출됩니다. 누적 투표·댓글은 그대로 유지됩니다.',
-          label: '다시 게시',
+          description: '유저 화면에 다시 노출됩니다. 누적 투표·댓글은 그대로 유지됩니다.',
+          label: '예, 다시 게시',
           tone: 'primary' as const,
         }
       : target === 'HIDDEN'
         ? {
             title: '숨김 처리하시겠습니까?',
-            body: '유저 화면에서 즉시 숨겨집니다. "다시 게시" 로 언제든 복구할 수 있고, 누적 투표·댓글은 보존됩니다.',
-            label: '숨김',
-            tone: 'secondary' as const,
+            description:
+              '유저 화면에서 즉시 숨겨집니다. "다시 게시" 로 언제든 복구할 수 있고, 누적 투표·댓글은 보존됩니다.',
+            label: '예, 숨김',
+            tone: 'warn' as const,
           }
         : {
             title: '종료 처리하시겠습니까?',
-            body: '영구 종료되어 더 이상 게시·복구할 수 없습니다. 누적 통계는 보존됩니다.',
-            label: '종료',
+            description: '영구 종료되어 더 이상 게시·복구할 수 없습니다. 누적 통계는 보존됩니다.',
+            label: '예, 종료',
             tone: 'danger' as const,
           }
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(43,39,48,0.5)] backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-surface rounded-xl shadow-lg p-6 w-full max-w-[460px] mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-[17px] font-extrabold mb-2">{meta.title}</div>
-        <div className="text-[13px] text-text-sub leading-relaxed mb-4">{meta.body}</div>
-        <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1 mb-5">
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">현재</span>
-            <span className="font-bold">{currentLabel}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-text-soft font-bold">변경 후</span>
-            <span className="font-extrabold">{BAL_GAME_BE_STATUS_LABEL[target]}</span>
-          </div>
+  const body = (
+    <>
+      <div className="mb-4">{meta.description}</div>
+      <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1">
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">현재</span>
+          <span className="font-bold">{currentLabel}</span>
         </div>
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={pending}>
-            취소
-          </button>
-          <button
-            className={`btn btn-sm ${
-              meta.tone === 'primary'
-                ? 'btn-primary'
-                : meta.tone === 'danger'
-                  ? 'btn-danger'
-                  : 'btn-secondary'
-            }`}
-            onClick={onConfirm}
-            disabled={pending}
-          >
-            {pending ? '처리 중...' : meta.label}
-          </button>
+        <div className="flex justify-between">
+          <span className="text-text-soft font-bold">변경 후</span>
+          <span className="font-extrabold">{BAL_GAME_BE_STATUS_LABEL[target]}</span>
         </div>
       </div>
-    </div>
+    </>
+  )
+  return (
+    <CommonConfirmDialog
+      title={meta.title}
+      body={body}
+      confirmLabel={meta.label}
+      tone={meta.tone}
+      pending={pending}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   )
 }

@@ -10,6 +10,7 @@ import {
 import type { SuspensionType } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function SuspensionLogDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -18,9 +19,13 @@ export default function SuspensionLogDetailPage() {
   const { data: log, isLoading } = useSuspensionLogDetail(logId)
   const [liftReason, setLiftReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const liftMutation = useLiftSuspensionMutation({
     onSuccess: () => navigate('/suspensions'),
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
 
   if (isLoading || !log) {
@@ -31,9 +36,12 @@ export default function SuspensionLogDetailPage() {
     )
   }
 
-  const handleLift = () => {
+  const handleLiftClick = () => {
     setError(null)
     if (!liftReason.trim()) return setError('해제 사유를 입력해주세요.')
+    setConfirmOpen(true)
+  }
+  const executeLift = () => {
     liftMutation.mutate({ id: log.id, payload: { lifted_reason: liftReason } })
   }
 
@@ -125,13 +133,25 @@ export default function SuspensionLogDetailPage() {
             </button>
             <button
               className="btn btn-primary btn-sm"
-              onClick={handleLift}
+              onClick={handleLiftClick}
               disabled={liftMutation.isPending}
             >
               {liftMutation.isPending ? '처리 중...' : '제재 해제'}
             </button>
           </div>
         </div>
+      )}
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="제재를 해제하시겠습니까?"
+          body={`#${log.id} ${log.user_nickname ?? ''} 의 ${SUSPENSION_TYPE_LABEL[log.suspension_type]} 제재를 해제합니다.`}
+          confirmLabel="예, 해제"
+          tone="warn"
+          pending={liftMutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeLift}
+        />
       )}
     </>
   )

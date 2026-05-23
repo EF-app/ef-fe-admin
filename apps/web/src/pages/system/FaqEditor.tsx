@@ -12,6 +12,7 @@ import {
 import type { FaqCategory } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 /** FAQ 등록·편집 페이지. /faqs/new 또는 /faqs/:id */
 export default function FaqEditorPage() {
@@ -29,6 +30,7 @@ export default function FaqEditorPage() {
   const [isPopular, setIsPopular] = useState(false)
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (existing && isEdit) {
@@ -43,18 +45,27 @@ export default function FaqEditorPage() {
 
   const createMutation = useCreateFaqMutation({
     onSuccess: () => navigate('/policies?tab=faq'),
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
   const updateMutation = useUpdateFaqMutation({
     onSuccess: () => navigate('/policies?tab=faq'),
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
   const pending = createMutation.isPending || updateMutation.isPending
 
-  const handleSubmit = () => {
+  const handleSubmitClick = () => {
     setError(null)
     if (!question.trim()) return setError('질문을 입력해주세요.')
     if (!answer.trim()) return setError('답변을 입력해주세요.')
+    setConfirmOpen(true)
+  }
+  const executeSubmit = () => {
     const payload = {
       category,
       question: question.trim(),
@@ -197,12 +208,23 @@ export default function FaqEditorPage() {
           <button
             className="btn btn-primary btn-sm"
             disabled={pending}
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
           >
             {pending ? '저장 중...' : isEdit ? '저장' : '추가'}
           </button>
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title={isEdit ? '저장하시겠습니까?' : 'FAQ 를 추가하시겠습니까?'}
+          body={isEdit ? 'FAQ 항목이 즉시 갱신됩니다.' : '새 FAQ 항목이 생성됩니다.'}
+          confirmLabel={isEdit ? '예, 저장' : '예, 추가'}
+          pending={pending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeSubmit}
+        />
+      )}
     </>
   )
 }

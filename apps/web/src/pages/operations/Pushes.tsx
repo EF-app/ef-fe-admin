@@ -17,6 +17,7 @@ import FilterChips from '../../components/ui/FilterChips'
 import EmptyState from '../../components/ui/EmptyState'
 import Pagination from '../../components/ui/Pagination'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const STATUS_OPTIONS: { value: PushStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: '전체' },
@@ -43,6 +44,7 @@ export default function PushesPage() {
   const { data, isLoading } = usePushes({ status, kind, page, size: 15 })
   const sendNow = useSendPushNowMutation()
   const cancel = useCancelPushMutation()
+  const [confirm, setConfirm] = useState<{ kind: 'send' | 'cancel'; id: number } | null>(null)
 
   const rows = useMemo(() => data?.content ?? [], [data?.content])
 
@@ -155,22 +157,14 @@ export default function PushesPage() {
                         <button
                           className="btn btn-primary btn-sm"
                           disabled={sendNow.isPending}
-                          onClick={() => {
-                            if (confirm('지금 즉시 발송할까요?')) {
-                              sendNow.mutate({ id: p.id })
-                            }
-                          }}
+                          onClick={() => setConfirm({ kind: 'send', id: p.id })}
                         >
                           <Send size={12} /> 즉시 발송
                         </button>
                         <button
                           className="btn btn-secondary btn-sm"
                           disabled={cancel.isPending}
-                          onClick={() => {
-                            if (confirm('예약을 취소할까요?')) {
-                              cancel.mutate({ id: p.id })
-                            }
-                          }}
+                          onClick={() => setConfirm({ kind: 'cancel', id: p.id })}
                         >
                           <X size={12} /> 취소
                         </button>
@@ -185,6 +179,39 @@ export default function PushesPage() {
       </div>
 
       <Pagination page={page} totalPages={data?.totalPages ?? 0} onChange={setPage} />
+
+      {confirm?.kind === 'send' && (
+        <ConfirmDialog
+          title="지금 즉시 발송하시겠습니까?"
+          body="예약을 무시하고 곧바로 푸시가 전송됩니다."
+          confirmLabel="예, 발송"
+          tone="danger"
+          pending={sendNow.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() =>
+            sendNow.mutate(
+              { id: confirm.id },
+              { onSettled: () => setConfirm(null) }
+            )
+          }
+        />
+      )}
+      {confirm?.kind === 'cancel' && (
+        <ConfirmDialog
+          title="예약을 취소하시겠습니까?"
+          body="이 푸시는 예약된 시각에 발송되지 않습니다."
+          confirmLabel="예, 취소"
+          tone="warn"
+          pending={cancel.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() =>
+            cancel.mutate(
+              { id: confirm.id },
+              { onSettled: () => setConfirm(null) }
+            )
+          }
+        />
+      )}
     </>
   )
 }

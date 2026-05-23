@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -23,6 +23,7 @@ import {
 import type { PolicyDoc, PolicyStatus } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 function deriveStatus(p: PolicyDoc): PolicyStatus {
   const now = Date.now()
@@ -67,6 +68,7 @@ export default function PolicyDetailPage() {
 
   const activateMutation = useActivatePolicyMutation()
   const toggleMutation = useTogglePolicyActiveMutation()
+  const [confirmKind, setConfirmKind] = useState<'activate' | 'deactivate' | null>(null)
 
   if (isLoading || !doc) {
     return <Topbar title="정책 문서" subtitle="불러오는 중..." />
@@ -121,14 +123,7 @@ export default function PolicyDetailPage() {
                 <button
                   className="btn btn-secondary btn-sm"
                   disabled={activateMutation.isPending}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `이 버전을 활성화하면 같은 타입의 다른 활성 버전은 자동으로 비활성화됩니다.\n계속할까요?`
-                      )
-                    )
-                      activateMutation.mutate({ uuid: doc.uuid })
-                  }}
+                  onClick={() => setConfirmKind('activate')}
                 >
                   <Power size={13} /> 이 버전 활성화 (다른 버전 자동 비활성)
                 </button>
@@ -137,14 +132,7 @@ export default function PolicyDetailPage() {
                 <button
                   className="btn btn-danger btn-sm"
                   disabled={toggleMutation.isPending}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        '활성 버전을 비활성화하면 사용자 화면에 노출되는 활성 정책이 없게 됩니다.\n계속할까요?'
-                      )
-                    )
-                      toggleMutation.mutate({ uuid: doc.uuid, is_active: false })
-                  }}
+                  onClick={() => setConfirmKind('deactivate')}
                 >
                   <PowerOff size={13} /> 비활성화
                 </button>
@@ -197,6 +185,39 @@ export default function PolicyDetailPage() {
           </div>
         </aside>
       </div>
+
+      {confirmKind === 'activate' && (
+        <ConfirmDialog
+          title="이 버전을 활성화하시겠습니까?"
+          body="같은 타입의 다른 활성 버전은 자동으로 비활성화됩니다."
+          confirmLabel="예, 활성화"
+          tone="warn"
+          pending={activateMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() =>
+            activateMutation.mutate(
+              { uuid: doc.uuid },
+              { onSettled: () => setConfirmKind(null) }
+            )
+          }
+        />
+      )}
+      {confirmKind === 'deactivate' && (
+        <ConfirmDialog
+          title="활성 버전을 비활성화하시겠습니까?"
+          body="사용자 화면에 노출되는 활성 정책이 없게 됩니다."
+          confirmLabel="예, 비활성화"
+          tone="danger"
+          pending={toggleMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() =>
+            toggleMutation.mutate(
+              { uuid: doc.uuid, is_active: false },
+              { onSettled: () => setConfirmKind(null) }
+            )
+          }
+        />
+      )}
     </>
   )
 }

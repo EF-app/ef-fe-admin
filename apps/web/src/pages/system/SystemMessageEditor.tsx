@@ -10,6 +10,7 @@ import {
 import type { SystemMessageTemplate, SystemMessageEvent } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 /**
  * 시스템 메시지 템플릿 편집 페이지.
@@ -27,6 +28,7 @@ export default function SystemMessageEditorPage() {
   const [body, setBody] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (template) {
@@ -38,8 +40,23 @@ export default function SystemMessageEditorPage() {
 
   const mutation = useUpdateSystemMessageMutation({
     onSuccess: () => navigate('/system-messages'),
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
+  const executeSave = () => {
+    if (!template) return
+    mutation.mutate({
+      uuid: template.uuid,
+      payload: {
+        event_code: template.event_code as SystemMessageEvent,
+        title,
+        body,
+        is_active: isActive,
+      },
+    })
+  }
 
   if (!template) {
     return (
@@ -115,22 +132,23 @@ export default function SystemMessageEditorPage() {
           <button
             className="btn btn-primary btn-sm"
             disabled={mutation.isPending}
-            onClick={() =>
-              mutation.mutate({
-                uuid: template.uuid,
-                payload: {
-                  event_code: template.event_code as SystemMessageEvent,
-                  title,
-                  body,
-                  is_active: isActive,
-                },
-              })
-            }
+            onClick={() => setConfirmOpen(true)}
           >
             {mutation.isPending ? '저장 중...' : '저장'}
           </button>
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="저장하시겠습니까?"
+          body="시스템 메시지 템플릿이 즉시 갱신됩니다."
+          confirmLabel="예, 저장"
+          pending={mutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={executeSave}
+        />
+      )}
     </>
   )
 }

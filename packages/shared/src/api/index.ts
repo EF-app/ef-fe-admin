@@ -18,7 +18,7 @@ export { authBeApi } from './authBe';
 export { balGamesBeApi } from './balGamesBe';
 export { postItsBeApi } from './postItsBe';
 export { accountBeApi } from './accountBe';
-export type { AdminPasswordChangeRequest, AdminPasswordResetRequest } from './accountBe';
+export type { AdminPasswordResetRequest } from './accountBe';
 // balVotesBeApi 는 balGamesBeApi.gameVotes 로 통합 — 별도 export 제거
 export type {
   AdminLoginBeReqDto,

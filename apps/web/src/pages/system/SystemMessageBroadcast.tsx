@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send } from 'lucide-react'
 import { useBroadcastSystemMessageMutation } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function SystemMessageBroadcastPage() {
   const navigate = useNavigate()
@@ -10,10 +11,16 @@ export default function SystemMessageBroadcastPage() {
   const [target, setTarget] = useState<'ALL_CHATS' | 'PREMIUM_CHATS'>('ALL_CHATS')
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const mutation = useBroadcastSystemMessageMutation({
-    onSuccess: (r) =>
-      setResult(`✅ ${r.sent.toLocaleString()}개 채팅방에 발송되었습니다.`),
-    onError: (e) => setError(e.message),
+    onSuccess: (r) => {
+      setResult(`✅ ${r.sent.toLocaleString()}개 채팅방에 발송되었습니다.`)
+      setConfirmOpen(false)
+    },
+    onError: (e) => {
+      setError(e.message)
+      setConfirmOpen(false)
+    },
   })
 
   return (
@@ -78,7 +85,7 @@ export default function SystemMessageBroadcastPage() {
               disabled={mutation.isPending || !body.trim()}
               onClick={() => {
                 setError(null)
-                mutation.mutate({ body, target })
+                setConfirmOpen(true)
               }}
             >
               <Send size={13} /> {mutation.isPending ? '발송 중...' : '발송'}
@@ -86,6 +93,18 @@ export default function SystemMessageBroadcastPage() {
           )}
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="지금 일괄 발송하시겠습니까?"
+          body={`${target === 'ALL_CHATS' ? '전체 활성 채팅' : '프리미엄 채팅만'}에 즉시 시스템 메시지가 전송됩니다. 취소할 수 없습니다.`}
+          confirmLabel="예, 발송"
+          tone="danger"
+          pending={mutation.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => mutation.mutate({ body, target })}
+        />
+      )}
     </>
   )
 }

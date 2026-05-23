@@ -35,6 +35,7 @@ import Topbar from '../../components/layout/Topbar'
 import EmptyState from '../../components/ui/EmptyState'
 import Modal from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const AV_COLOR_MAP: Record<CommentAvatarColor, { bg: string; color: string }> = {
   purple: { bg: 'rgba(150,134,191,0.18)', color: '#9686BF' },
@@ -279,6 +280,7 @@ function CommentBody({
 }) {
   const [revealReal, setRevealReal] = useState(false)
   const [reportProcessed, setReportProcessed] = useState(false)
+  const [confirmHideOpen, setConfirmHideOpen] = useState(false)
   const hideMutation = useHideBalCommentMutation()
 
   const av = AV_COLOR_MAP[item.avColor]
@@ -286,13 +288,12 @@ function CommentBody({
   const isVote = !isReply && 'voteChoice' in item && item.voteChoice
   const displayName = revealReal ? item.authorRealNickname : item.displayNick
 
-  const handleHide = () => {
-    if (item.hidden) {
-      if (!confirm('숨김을 해제할까요? 신고 카운트가 0으로 리셋됩니다.')) return
-    } else {
-      if (!confirm('이 댓글을 숨김 처리할까요?')) return
-    }
-    hideMutation.mutate({ gameId, commentId: item.id })
+  const handleHide = () => setConfirmHideOpen(true)
+  const executeHide = () => {
+    hideMutation.mutate(
+      { gameId, commentId: item.id },
+      { onSettled: () => setConfirmHideOpen(false) }
+    )
   }
 
   return (
@@ -415,6 +416,22 @@ function CommentBody({
           </div>
         )}
       </div>
+
+      {confirmHideOpen && (
+        <ConfirmDialog
+          title={item.hidden ? '숨김을 해제하시겠습니까?' : '댓글을 숨김 처리하시겠습니까?'}
+          body={
+            item.hidden
+              ? '신고 카운트가 0으로 리셋됩니다.'
+              : '유저 화면에서 즉시 가려집니다.'
+          }
+          confirmLabel={item.hidden ? '예, 해제' : '예, 숨김'}
+          tone={item.hidden ? 'warn' : 'danger'}
+          pending={hideMutation.isPending}
+          onCancel={() => setConfirmHideOpen(false)}
+          onConfirm={executeHide}
+        />
+      )}
     </div>
   )
 }

@@ -16,6 +16,7 @@ import {
 import type { SuspensionType } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge, ReportStatusBadge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -27,6 +28,7 @@ export default function ReportDetailPage() {
   const [durationDays, setDurationDays] = useState(7)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [confirmKind, setConfirmKind] = useState<'process' | 'dismiss' | null>(null)
 
   const processMutation = useProcessReportMutation({
     onSuccess: () => navigate('/reports'),
@@ -37,11 +39,15 @@ export default function ReportDetailPage() {
     onError: (e) => setError(e.message),
   })
 
-  const handleProcess = () => {
+  const handleProcessClick = () => {
     if (!report) return
     setError(null)
     const check = validators.suspensionReason(reason)
     if (!check.valid) return setError(check.message ?? '')
+    setConfirmKind('process')
+  }
+  const executeProcess = () => {
+    if (!report) return
     processMutation.mutate({
       id: report.id,
       payload: {
@@ -50,6 +56,10 @@ export default function ReportDetailPage() {
         ends_at: calcSuspensionEndsAt(type, type === 'TEMPORARY' ? durationDays : undefined),
       },
     })
+  }
+  const executeDismiss = () => {
+    if (!report) return
+    dismissMutation.mutate({ id: report.id })
   }
 
   if (isLoading || !report) {
@@ -171,20 +181,43 @@ export default function ReportDetailPage() {
           <div className="flex justify-end gap-2">
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => dismissMutation.mutate({ id: report.id })}
+              onClick={() => setConfirmKind('dismiss')}
               disabled={dismissMutation.isPending}
             >
               {dismissMutation.isPending ? '처리 중...' : '기각'}
             </button>
             <button
               className="btn btn-primary btn-sm"
-              onClick={handleProcess}
+              onClick={handleProcessClick}
               disabled={processMutation.isPending}
             >
               {processMutation.isPending ? '처리 중...' : '제재 발동'}
             </button>
           </div>
         </div>
+      )}
+
+      {confirmKind === 'process' && (
+        <ConfirmDialog
+          title="제재를 발동하시겠습니까?"
+          body={`#${report.id} 신고에 ${SUSPENSION_TYPE_LABEL[type]} 제재를 적용합니다.`}
+          confirmLabel="예, 발동"
+          tone="danger"
+          pending={processMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={executeProcess}
+        />
+      )}
+      {confirmKind === 'dismiss' && (
+        <ConfirmDialog
+          title="신고를 기각하시겠습니까?"
+          body={`#${report.id} 신고를 기각 처리합니다.`}
+          confirmLabel="예, 기각"
+          tone="warn"
+          pending={dismissMutation.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={executeDismiss}
+        />
       )}
     </>
   )

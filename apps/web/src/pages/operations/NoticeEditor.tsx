@@ -16,6 +16,7 @@ import type {
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import { Badge } from '../../components/ui/Badge'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 /** 일반 카테고리 — 정정(AMEND)은 기존 PUBLISHED 공지에서 [정정하기] 로만 작성 가능 */
 const NORMAL_CATEGORIES: NoticeBeCategory[] = ['NOTICE', 'EVENT', 'UPDATE']
@@ -582,6 +583,10 @@ export default function NoticeEditorPage() {
   )
 }
 
+/**
+ * 공지 발행/예약/종료/임시저장 확인 — 공용 ConfirmDialog 를 감싸
+ * 상태별 title/body/tone/confirmLabel 분기와 메타 테이블만 추가한다.
+ */
 function ConfirmActionDialog({
   payload,
   pending,
@@ -597,11 +602,10 @@ function ConfirmActionDialog({
   const meta = (() => {
     if (status === 'DRAFT') {
       return {
-        title: '임시저장하시겠습니까?',
-        body: '게시판에 노출되지 않고, 이후에 다시 열어서 수정·발행할 수 있습니다.',
-        confirmLabel: '임시저장',
-        confirmTone: 'secondary' as const,
-        icon: <Save size={14} className="text-text-soft" />,
+        dialogTitle: '임시저장하시겠습니까?',
+        description: '게시판에 노출되지 않고, 이후에 다시 열어서 수정·발행할 수 있습니다.' as React.ReactNode,
+        confirmLabel: '예, 임시저장',
+        tone: 'primary' as const,
       }
     }
     if (status === 'SCHEDULED') {
@@ -609,97 +613,72 @@ function ConfirmActionDialog({
         ? scheduledAt.slice(0, 16).replace('T', ' ')
         : ''
       return {
-        title: '예약 발행하시겠습니까?',
-        body: (
+        dialogTitle: '예약 발행하시겠습니까?',
+        description: (
           <>
             지정하신 <strong>{display}</strong> 에 자동으로 게시됩니다. 예약 발행
             전까지는 수정·취소가 가능합니다.
           </>
-        ),
-        confirmLabel: '예약',
-        confirmTone: 'primary' as const,
-        icon: <Clock size={14} className="text-point-dark" />,
+        ) as React.ReactNode,
+        confirmLabel: '예, 예약',
+        tone: 'primary' as const,
       }
     }
     if (status === 'ARCHIVED') {
       return {
-        title: '이 공지를 종료(ARCHIVED) 처리할까요?',
-        body: (
-          <>
-            게시판에서 더 이상 노출되지 않습니다. 필요 시 다시 게시 상태로
-            전환할 수 있습니다.
-          </>
-        ),
-        confirmLabel: '종료',
-        confirmTone: 'secondary' as const,
-        icon: <Archive size={14} className="text-text-sub" />,
+        dialogTitle: '이 공지를 종료(ARCHIVED) 처리하시겠습니까?',
+        description:
+          '게시판에서 더 이상 노출되지 않습니다. 필요 시 다시 게시 상태로 전환할 수 있습니다.' as React.ReactNode,
+        confirmLabel: '예, 종료',
+        tone: 'warn' as const,
       }
     }
-    // PUBLISHED — 신규 즉시 발행 vs 종료 → 재게시 구분
+    // PUBLISHED
     return {
-      title: '지금 즉시 발행하시겠습니까?',
-      body: (
+      dialogTitle: '지금 즉시 발행하시겠습니까?',
+      description: (
         <>
           발행 후에는 본문/카테고리 <strong>수정이 제한</strong>됩니다. 수정이
           필요하면 정정 공지를 새로 작성해야 합니다. (게시 ↔ 종료 상태 전환은
           가능)
         </>
-      ),
-      confirmLabel: '발행',
-      confirmTone: 'primary' as const,
-      icon: <Send size={14} className="text-point-dark" />,
+      ) as React.ReactNode,
+      confirmLabel: '예, 발행',
+      tone: 'danger' as const,
     }
   })()
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(43,39,48,0.5)] backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-surface rounded-xl shadow-lg p-6 w-full max-w-[460px] mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          {meta.icon}
-          <div className="text-[17px] font-extrabold">{meta.title}</div>
-        </div>
-        <div className="text-[13px] text-text-sub leading-relaxed mb-4">
-          {meta.body}
-        </div>
-
-        <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1 mb-5">
-          <Row label="제목" value={title} />
-          <Row
-            label="카테고리"
-            value={
-              category === 'AMEND'
-                ? `정정 (원본 #${payload.originalNoticeId ?? '-'})`
-                : NOTICE_BE_CATEGORY_LABEL[category]
-            }
-          />
-          <Row label="상태" value={NOTICE_BE_STATUS_LABEL[status]} />
-          {status === 'SCHEDULED' && scheduledAt && (
-            <Row label="예약 시각" value={scheduledAt.slice(0, 16).replace('T', ' ')} />
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={pending}>
-            취소
-          </button>
-          <button
-            className={`btn btn-sm ${
-              meta.confirmTone === 'primary' ? 'btn-primary' : 'btn-secondary'
-            }`}
-            onClick={onConfirm}
-            disabled={pending}
-          >
-            {pending ? '처리 중...' : meta.confirmLabel}
-          </button>
-        </div>
+  const body = (
+    <>
+      <div className="mb-4">{meta.description}</div>
+      <div className="bg-surface-alt rounded-md p-3 text-[12px] space-y-1">
+        <Row label="제목" value={title} />
+        <Row
+          label="카테고리"
+          value={
+            category === 'AMEND'
+              ? `정정 (원본 #${payload.originalNoticeId ?? '-'})`
+              : NOTICE_BE_CATEGORY_LABEL[category]
+          }
+        />
+        <Row label="상태" value={NOTICE_BE_STATUS_LABEL[status]} />
+        {status === 'SCHEDULED' && scheduledAt && (
+          <Row label="예약 시각" value={scheduledAt.slice(0, 16).replace('T', ' ')} />
+        )}
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <ConfirmDialog
+      title={meta.dialogTitle}
+      body={body}
+      confirmLabel={meta.confirmLabel}
+      tone={meta.tone}
+      pending={pending}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   )
 }
 
