@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ScrollView, View, Text, Pressable, TextInput } from 'react-native';
+import { ScrollView, View, Text, Pressable, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import {
   useUserDetail,
   useSuspendUserMutation,
-  useLiftSuspensionMutation,
+  useLiftAllSuspensionsForUserMutation,
   USER_STATUS_LABEL,
   SUSPENSION_TYPE_LABEL,
   POST_IT_CATEGORY_LABEL,
@@ -16,6 +16,9 @@ import {
   formatCurrency,
   calcSuspensionEndsAt,
   TEMPORARY_DURATION_OPTIONS,
+  previewWarningEscalation,
+  WARNING_WINDOW_DAYS,
+  WARNING_THRESHOLD,
 } from '@ef-fe-admin/shared';
 import type {
   SuspensionType,
@@ -43,7 +46,7 @@ export default function UserDetailScreen() {
       setMode('idle');
     },
   });
-  const liftMutation = useLiftSuspensionMutation({
+  const liftMutation = useLiftAllSuspensionsForUserMutation({
     onSuccess: () => {
       setLiftReason('');
       setMode('idle');
@@ -58,8 +61,7 @@ export default function UserDetailScreen() {
     );
   }
 
-  const onSuspend = () => {
-    if (!reason.trim()) return;
+  const submitSuspend = () => {
     suspendMutation.mutate({
       uuid: user.uuid,
       payload: {
@@ -70,10 +72,34 @@ export default function UserDetailScreen() {
     });
   };
 
+  const escalation = previewWarningEscalation(
+    user.recent_warning_count ?? 0,
+    user.last_temporary_duration_days ?? null,
+  );
+
+  const onSuspend = () => {
+    if (!reason.trim()) return;
+    if (type === 'WARNING' && escalation.willEscalate) {
+      const nextLabel =
+        escalation.nextType === 'PERMANENT' ? '영구정지' : `${escalation.days}일 일시정지`;
+      Alert.alert(
+        '자동 에스컬레이션 경고',
+        `이번 부과로 최근 ${WARNING_WINDOW_DAYS}일 누적 경고가 ${WARNING_THRESHOLD}회에 도달합니다.\n자동으로 ${nextLabel}가 추가 부과됩니다.\n그래도 부과하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '예, 부과', style: 'destructive', onPress: submitSuspend },
+        ],
+      );
+      return;
+    }
+    submitSuspend();
+  };
+
   const onLift = () => {
     if (!user.active_suspension || !liftReason.trim()) return;
+    // WARNING 제외, TEMPORARY/PERMANENT 모두 일괄 해제
     liftMutation.mutate({
-      id: user.active_suspension.id,
+      userId: user.id,
       payload: { lifted_reason: liftReason.trim() },
     });
   };
@@ -97,13 +123,7 @@ export default function UserDetailScreen() {
             <View className="flex-row items-center gap-2 mb-1 flex-wrap">
               <Text className="text-[16px] font-extrabold text-text">{user.nickname}</Text>
               <Badge
-                variant={
-                  user.status === 'ACTIVE'
-                    ? 'active'
-                    : user.status === 'WARNING'
-                    ? 'warn'
-                    : 'danger'
-                }
+                variant={user.status === 'ACTIVE' ? 'active' : 'danger'}
               >
                 {USER_STATUS_LABEL[user.status]}
               </Badge>
@@ -158,6 +178,25 @@ export default function UserDetailScreen() {
       {mode === 'suspend' && (
         <View className="bg-surface border border-border rounded-xl p-4 mb-3">
           <Text className="text-[13px] font-extrabold text-text mb-3">제재 발동</Text>
+          {(user.recent_warning_count ?? 0) > 0 && (
+            <View className="bg-warn-soft rounded-md px-3 py-2 mb-3">
+              <Text className="text-[11.5px] text-text-sub">
+                최근 {WARNING_WINDOW_DAYS}일 경고{' '}
+                <Text className="font-extrabold text-warn-dark">
+                  {user.recent_warning_count}
+                </Text>
+                회 · 임계치 {WARNING_THRESHOLD}회 누적 시 자동 일시정지
+              </Text>
+              {type === 'WARNING' && escalation.willEscalate && (
+                <Text className="text-[11.5px] font-extrabold text-warn-dark mt-1">
+                  ⚠ 이번 부과 시 자동{' '}
+                  {escalation.nextType === 'PERMANENT'
+                    ? '영구정지'
+                    : `${escalation.days}일 일시정지`}
+                </Text>
+              )}
+            </View>
+          )}
           <View className="flex-row gap-2 mb-3">
             {(['WARNING', 'TEMPORARY', 'PERMANENT'] as SuspensionType[]).map((t) => (
               <Pressable
@@ -296,8 +335,20 @@ export default function UserDetailScreen() {
                 <Text className="text-[12.5px] font-extrabold text-text">
                   {SUSPENSION_TYPE_LABEL[s.suspension_type]}
                 </Text>
-                <Badge variant={s.is_lifted ? 'active' : 'warn'}>
-                  {s.is_lifted ? '해제됨' : '진행 중'}
+                <Badge
+                  variant={
+                    !s.is_lifted
+                      ? 'warn'
+                      : s.lifted_by_admin_id == null
+                        ? 'neutral'
+                        : 'active'
+                  }
+                >
+                  {!s.is_lifted
+                    ? '진행 중'
+                    : s.lifted_by_admin_id == null
+                      ? '자동 만료'
+                      : '수동 해제'}
                 </Badge>
               </View>
               <Text className="text-[11.5px] text-text-sub" numberOfLines={2}>

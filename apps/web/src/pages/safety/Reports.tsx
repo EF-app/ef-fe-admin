@@ -31,6 +31,11 @@ const TARGET_OPTIONS: { value: ReportTargetType | undefined; label: string }[] =
   { value: 'CHAT_IMAGE', label: '채팅 이미지' },
 ]
 
+const SORT_OPTIONS: { value: 'OLDEST' | 'MOST_REPORTED'; label: string }[] = [
+  { value: 'OLDEST', label: '오래된순' },
+  { value: 'MOST_REPORTED', label: '신고건수많은순' },
+]
+
 function groupKey(g: ReportGroup) {
   return `${g.target_type}-${g.target_id}`
 }
@@ -51,13 +56,13 @@ function getContentLink(g: ReportGroup): { href: string; label: string } | null 
     return userUuid ? { href: `/users/${userUuid}`, label: '프로필 보기' } : null
   }
   if (g.target_type === 'POST_IT')
-    return { href: '/post-its', label: '포스트잇 목록' }
+    return { href: `/post-its?focus=${g.target_id}`, label: '포스트잇 보기' }
   if (g.target_type === 'BAL_COMMENT') {
-    // BAL_COMMENT 신고의 부모 게임 id 사용
+    // BAL_COMMENT 신고의 부모 게임 id 사용 + 신고당한 댓글로 자동 스크롤되도록 focus 전달
     const firstWithGame = g.reports.find((r) => r.bal_game_id != null)
     const gameId = firstWithGame?.bal_game_id
     return gameId != null
-      ? { href: `/balance/${gameId}/comments`, label: '게임 댓글 보기' }
+      ? { href: `/balance/${gameId}/comments?focus=${g.target_id}`, label: '게임 댓글 보기' }
       : { href: '/balance', label: '게임 목록' }
   }
   return null
@@ -83,14 +88,12 @@ function resolveGroupOutcome(g: ReportGroup):
   | { kind: 'dismissed' }
   | { kind: 'processed' } {
   if (g.pending_count > 0) return { kind: 'pending', count: g.pending_count }
+  // 평탄화 정책 — 같은 그룹의 모든 PROCESSED 신고에 동일 suspension_id 부여됨.
   const processed = g.reports.find(
-    (r) =>
-      r.status === 'PROCESSED' &&
-      (r.suspension_id != null || r.effective_suspension_id != null)
+    (r) => r.status === 'PROCESSED' && r.suspension_id != null,
   )
   if (processed) {
-    const sid = processed.suspension_id ?? processed.effective_suspension_id!
-    return { kind: 'suspended', suspensionId: sid }
+    return { kind: 'suspended', suspensionId: processed.suspension_id! }
   }
   const anyDismissed = g.reports.some((r) => r.status === 'DISMISSED')
   if (anyDismissed && !g.reports.some((r) => r.status === 'PROCESSED'))
@@ -102,12 +105,14 @@ export default function ReportsPage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState<ReportStatus | undefined>('PENDING')
   const [target, setTarget] = useState<ReportTargetType | undefined>(undefined)
+  const [sort, setSort] = useState<'OLDEST' | 'MOST_REPORTED'>('OLDEST')
   const [page, setPage] = useState(0)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const { data, isLoading } = useReportsGrouped({
     status,
     target_type: target,
+    sort,
     page,
     size: 15,
   })
@@ -125,7 +130,7 @@ export default function ReportsPage() {
     <>
       <Topbar
         title="신고 내역"
-        subtitle="같은 대상에 묶인 신고는 한 건수로 표시 — 그룹 내 시간 ASC, 첫 신고가 대표 후보"
+        subtitle="같은 대상에 묶인 신고는 한 건수로 표시"
       />
 
       <div className="card mb-4">
@@ -146,6 +151,14 @@ export default function ReportsPage() {
             }}
             options={TARGET_OPTIONS}
           />
+          <FilterChips
+            value={sort}
+            onChange={(v) => {
+              setSort(v)
+              setPage(0)
+            }}
+            options={SORT_OPTIONS}
+          />
         </div>
       </div>
 
@@ -163,7 +176,6 @@ export default function ReportsPage() {
             const key = groupKey(g)
             const isOpen = expanded.has(key)
             const reps = g.reports
-            const first = reps[0]
             const targetLabel = REPORT_TARGET_TYPE_LABEL[g.target_type]
             const contentLink = getContentLink(g)
             const targetUserLink = getTargetUserLink(g)
@@ -188,12 +200,19 @@ export default function ReportsPage() {
                   </span>
                   <Badge tone="point">{targetLabel}</Badge>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {g.target_user_id != null && (
+                        <span className="text-text-soft text-[11px]">
+                          #{g.target_user_id}
+                        </span>
+                      )}
+                      {g.target_user_login_id && (
+                        <span className="text-text-soft text-[11px]">
+                          #{g.target_user_login_id}
+                        </span>
+                      )}
                       <span className="font-extrabold text-[13.5px]">
-                        {g.target_user_nickname ?? `target #${g.target_id}`}
-                      </span>
-                      <span className="text-text-soft text-[11px]">
-                        · 대상 #{g.target_id}
+                        @{g.target_user_nickname ?? '-'}
                       </span>
                     </div>
                     {g.target_preview && (
@@ -294,7 +313,6 @@ export default function ReportsPage() {
                       </thead>
                       <tbody>
                         {reps.map((r, idx) => {
-                          const isFirst = r.id === first.id
                           return (
                             <tr
                               key={r.id}
@@ -303,16 +321,9 @@ export default function ReportsPage() {
                             >
                               <td className="text-text-soft">{idx + 1}</td>
                               <td>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold">
-                                    {r.reporter_nickname ?? '(탈퇴)'}
-                                  </span>
-                                  {isFirst && (
-                                    <span className="badge badge-point text-[9.5px] px-1.5 py-0">
-                                      대표 후보
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="font-bold">
+                                  {r.reporter_nickname ?? '(탈퇴)'}
+                                </span>
                               </td>
                               <td className="text-text-sub">
                                 <div className="line-clamp-1 max-w-[260px]">

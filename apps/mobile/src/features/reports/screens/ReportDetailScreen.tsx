@@ -39,18 +39,11 @@ export default function ReportDetailScreen() {
   }
 
   const onSubmit = () => {
-    if (!reason.trim()) return;
     if (mode === 'process') {
-      process.mutate({
-        id: report.id,
-        payload: {
-          suspension_type: type,
-          reason: reason.trim(),
-          ends_at: calcSuspensionEndsAt(type, days),
-        },
-      });
+      // 제재 부과는 별도 흐름(유저 상세 화면) 에서. 여기선 "제재 없이 처리" 로 PROCESSED 마킹만.
+      process.mutate({ id: report.id, payload: { suspension_id: null } });
     } else {
-      dismiss.mutate({ id: report.id, reason: reason.trim() });
+      dismiss.mutate({ id: report.id });
     }
   };
 

@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import AdminLayout from './components/layout/AdminLayout'
 import LoginPage from './pages/Login'
@@ -9,7 +10,6 @@ import NotFoundPage from './pages/NotFound'
 import DashboardPage from './pages/operations/Dashboard'
 import UsersPage from './pages/operations/Users'
 import UserDetailPage from './pages/operations/UserDetail'
-import ProfileReviewsPage from './pages/operations/ProfileReviews'
 import NoticesPage from './pages/operations/Notices'
 import NoticeEditorPage from './pages/operations/NoticeEditor'
 import PushesPage from './pages/operations/Pushes'
@@ -65,8 +65,23 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * 라우트 변경 시 body 의 inline overflow 스타일 강제 초기화.
+ * Modal/ConfirmDialog 의 cleanup 누락/race condition 으로 'hidden' 이 남아도
+ * 페이지 이동 시 자동 복구.
+ */
+function BodyOverflowReset() {
+  const location = useLocation()
+  useEffect(() => {
+    document.body.style.overflow = ''
+  }, [location.pathname])
+  return null
+}
+
 export default function App() {
   return (
+    <>
+    <BodyOverflowReset />
     <Routes>
       <Route path="/test" element={<TestCenterPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -85,7 +100,6 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="users/:id" element={<UserDetailPage />} />
-        <Route path="profile-reviews" element={<ProfileReviewsPage />} />
         <Route path="notices" element={<NoticesPage />} />
         <Route path="notices/new" element={<NoticeEditorPage />} />
         <Route path="notices/:id/edit" element={<NoticeEditorPage />} />
@@ -139,5 +153,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </>
   )
 }

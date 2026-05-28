@@ -12,7 +12,6 @@ import { usersApi } from '../api/users';
 import { userBeApi } from '../api/userBe';
 import { balCommentBeApi } from '../api/balCommentBe';
 import { blockBeApi } from '../api/blockBe';
-import { reportsApi } from '../api/reports';
 import { reportsBeApi } from '../api/reportsBe';
 import { paymentsApi } from '../api/payments';
 import { profileReviewsApi, ProfileReviewListParams } from '../api/profileReviews';
@@ -40,7 +39,6 @@ import type {
 } from '../types/user';
 import type {
   Report,
-  ReportListParams,
   ReportGroup,
   ReportGroupListParams,
   ProcessReportRequest,
@@ -70,6 +68,7 @@ import type {
   SuspensionLog,
   SuspensionLogListParams,
   LiftSuspensionRequest,
+  CreateSuspensionRequest,
 } from '../types/suspensionLog';
 import type { PostIt, PostItListParams } from '../types/postIt';
 import type {
@@ -93,7 +92,6 @@ import {
   mockUserDetail,
   mockUserDetailSuspended,
   mockUserDetailWithdrawing,
-  mockReportsPage,
   mockReports,
   mockReportGroupsPage,
   mockPaymentsPage,
@@ -337,7 +335,7 @@ export function useRevenueChart(days = 30, options?: QueryOpts<ChartPoint[]>) {
 export function useUsers(params?: UserListParams, options?: QueryOpts<PageResponse<User>>) {
   return useQuery<PageResponse<User>, NormalizedError>({
     queryKey: QUERY_KEYS.USERS(params),
-    // BE 연결됨 (AdminUserController GET /v1/admin/user). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminUserController GET /v1/admin/users). VITE_USE_MOCK=true 면 mock.
     queryFn: isMockMode() ? mocked(mockUsersPage) : () => userBeApi.getUser(params),
     placeholderData: mockUsersPage,
     ...options,
@@ -356,7 +354,7 @@ export function useUserDetail(
 ) {
   return useQuery<UserDetail, NormalizedError>({
     queryKey: QUERY_KEYS.USER_DETAIL(id ?? ''),
-    // BE 연결됨 (AdminUserController GET /v1/admin/user/{id}). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminUserController GET /v1/admin/users/{id}). VITE_USE_MOCK=true 면 mock.
     queryFn: isMockMode()
       ? mocked(pickMockUserDetail(id))
       : () => userBeApi.getUserDetail(id!),
@@ -404,21 +402,6 @@ export function useSuspendUserMutation(
 }
 
 /* ----------- 신고 ----------- */
-export function useReports(
-  params?: ReportListParams,
-  options?: QueryOpts<PageResponse<Report>>
-) {
-  return useQuery<PageResponse<Report>, NormalizedError>({
-    queryKey: QUERY_KEYS.REPORTS(params),
-    // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
-    queryFn: isMockMode()
-      ? mocked(mockReportsPage)
-      : () => reportsBeApi.list(params),
-    placeholderData: mockReportsPage,
-    ...options,
-  });
-}
-
 /**
  * 그룹화된 신고 목록 — BE `GET /v1/admin/reports/grouped`.
  * 같은 (target_type, target_id) 신고들이 한 그룹으로 묶이고,
@@ -430,7 +413,6 @@ export function useReportsGrouped(
 ) {
   return useQuery<PageResponse<ReportGroup>, NormalizedError>({
     queryKey: QUERY_KEYS.REPORTS_GROUPED(params),
-    // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     queryFn: isMockMode()
       ? mocked(mockReportGroupsPage)
       : () => reportsBeApi.listGrouped(params),
@@ -446,7 +428,6 @@ export function useReportDetail(
   const fallback = mockReports.find((r) => r.id === id) ?? mockReports[0];
   return useQuery<Report, NormalizedError>({
     queryKey: QUERY_KEYS.REPORT_DETAIL(id ?? 0),
-    // mock 분기 (팀원 데모용) — VITE_USE_MOCK=true 면 mock, false 면 BE 호출.
     queryFn: isMockMode()
       ? mocked(fallback)
       : () => reportsBeApi.detail(id!),
@@ -462,7 +443,7 @@ export function useProcessReportMutation(
   const qc = useQueryClient();
   return useMutation<Report, NormalizedError, { id: number; payload: ProcessReportRequest }>({
     ...options,
-    mutationFn: ({ id, payload }) => reportsApi.process(id, payload),
+    mutationFn: ({ id, payload }) => reportsBeApi.process(id, payload),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['reports'] });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_ALERTS });
@@ -472,12 +453,12 @@ export function useProcessReportMutation(
 }
 
 export function useDismissReportMutation(
-  options?: MutationOpts<Report, { id: number; reason?: string }>
+  options?: MutationOpts<Report, { id: number }>
 ) {
   const qc = useQueryClient();
-  return useMutation<Report, NormalizedError, { id: number; reason?: string }>({
+  return useMutation<Report, NormalizedError, { id: number }>({
     ...options,
-    mutationFn: ({ id, reason }) => reportsApi.dismiss(id, reason),
+    mutationFn: ({ id }) => reportsBeApi.dismiss(id),
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['reports'] });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_ALERTS });
@@ -546,27 +527,38 @@ export function useProfileReviews(
   });
 }
 
-export function useApproveProfileMutation(options?: MutationOpts<void, string>) {
+// 프로필 승인 — BE 연결됨 (AdminUserController PATCH /v1/admin/users/{id}/profile/approve).
+// 어드민 유저 관리 페이지에 통합됨. 파라미터는 userId (UUID 가 아닌 PK).
+export function useApproveProfileMutation(options?: MutationOpts<void, number>) {
   const qc = useQueryClient();
-  return useMutation<void, NormalizedError, string>({
+  return useMutation<void, NormalizedError, number>({
     ...options,
-    mutationFn: (userUuid) => profileReviewsApi.approve(userUuid),
+    mutationFn: isMockMode()
+      ? () => Promise.resolve()
+      : (userId) => userBeApi.approveProfile(userId),
     onSuccess: (...args) => {
-      qc.invalidateQueries({ queryKey: ['profile-reviews'] });
+      const [, userId] = args;
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-detail', userId] });
       options?.onSuccess?.(...args);
     },
   });
 }
 
+// 프로필 반려 — BE 연결됨 (AdminUserController PATCH /v1/admin/users/{id}/profile/reject).
 export function useRejectProfileMutation(
-  options?: MutationOpts<void, { userUuid: string; reason: string }>
+  options?: MutationOpts<void, { userId: number; reason: string }>
 ) {
   const qc = useQueryClient();
-  return useMutation<void, NormalizedError, { userUuid: string; reason: string }>({
+  return useMutation<void, NormalizedError, { userId: number; reason: string }>({
     ...options,
-    mutationFn: ({ userUuid, reason }) => profileReviewsApi.reject(userUuid, reason),
+    mutationFn: isMockMode()
+      ? () => Promise.resolve()
+      : ({ userId, reason }) => userBeApi.rejectProfile(userId, reason),
     onSuccess: (...args) => {
-      qc.invalidateQueries({ queryKey: ['profile-reviews'] });
+      const [, vars] = args;
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-detail', vars.userId] });
       options?.onSuccess?.(...args);
     },
   });
@@ -772,15 +764,14 @@ export function useAuditLogs(
   });
 }
 
-/* ----------- 제재 로그 ----------- */
+/* ----------- 제재 (BE AdminSuspensionController — /v1/admin/suspensions) ----------- */
 export function useSuspensionLogs(
   params?: SuspensionLogListParams,
   options?: QueryOpts<PageResponse<SuspensionLog>>
 ) {
   return useQuery<PageResponse<SuspensionLog>, NormalizedError>({
     queryKey: QUERY_KEYS.SUSPENSION_LOGS(params),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true
+    queryFn: isMockMode()
       ? mocked(mockSuspensionLogsPage)
       : () => suspensionLogsApi.list(params),
     placeholderData: mockSuspensionLogsPage,
@@ -796,8 +787,7 @@ export function useSuspensionLogDetail(
     mockSuspensionLogs.find((s) => s.id === id) ?? mockSuspensionLogs[0];
   return useQuery<SuspensionLog, NormalizedError>({
     queryKey: QUERY_KEYS.SUSPENSION_LOG_DETAIL(id ?? 0),
-    // BE 미구현 — true 를 isMockMode() 로 되돌리면 BE 분기 복귀.
-    queryFn: true
+    queryFn: isMockMode()
       ? mocked(fallback)
       : () => suspensionLogsApi.detail(id!),
     enabled: id != null,
@@ -820,6 +810,47 @@ export function useLiftSuspensionMutation(
     onSuccess: (...args) => {
       qc.invalidateQueries({ queryKey: ['suspension-logs'] });
       qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-detail'] });
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+/** 특정 유저의 활성 차단 제재 (TEMPORARY/PERMANENT) 일괄 해제. WARNING 은 대상 제외. */
+export function useLiftAllSuspensionsForUserMutation(
+  options?: MutationOpts<SuspensionLog[], { userId: number; payload: LiftSuspensionRequest }>
+) {
+  const qc = useQueryClient();
+  return useMutation<
+    SuspensionLog[],
+    NormalizedError,
+    { userId: number; payload: LiftSuspensionRequest }
+  >({
+    ...options,
+    mutationFn: ({ userId, payload }) =>
+      suspensionLogsApi.liftAllForUser(userId, payload),
+    onSuccess: (...args) => {
+      qc.invalidateQueries({ queryKey: ['suspension-logs'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-detail'] });
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+/** 제재 부과 — POST /v1/admin/suspensions (body.targetUserId).
+ *  성공 시 제재 로그 + 유저 목록/상세 캐시 무효화. */
+export function useCreateSuspensionMutation(
+  options?: MutationOpts<SuspensionLog, CreateSuspensionRequest>
+) {
+  const qc = useQueryClient();
+  return useMutation<SuspensionLog, NormalizedError, CreateSuspensionRequest>({
+    ...options,
+    mutationFn: (req) => suspensionLogsApi.create(req),
+    onSuccess: (...args) => {
+      qc.invalidateQueries({ queryKey: ['suspension-logs'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-detail'] });
       options?.onSuccess?.(...args);
     },
   });
@@ -916,7 +947,7 @@ export function useFeedbacks(
 ) {
   return useQuery<PageResponse<Feedback>, NormalizedError>({
     queryKey: QUERY_KEYS.FEEDBACKS(params),
-    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedback). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedbacks). VITE_USE_MOCK=true 면 mock.
     queryFn: isMockMode() ? mocked(mockFeedbacksPage) : () => feedbackBeApi.list(params),
     placeholderData: mockFeedbacksPage,
     ...options,
@@ -930,7 +961,7 @@ export function useFeedbackDetail(
   const fallback = mockFeedbacks.find((f) => f.id === id) ?? mockFeedbacks[0];
   return useQuery<Feedback, NormalizedError>({
     queryKey: QUERY_KEYS.FEEDBACK_DETAIL(id ?? 0),
-    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedback/{id}). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminFeedbackController GET /v1/admin/feedbacks/{id}). VITE_USE_MOCK=true 면 mock.
     queryFn: isMockMode() ? mocked(fallback) : () => feedbackBeApi.detail(id!),
     enabled: id != null,
     placeholderData: fallback,
@@ -948,7 +979,7 @@ export function useUpdateFeedbackMutation(
     { id: number; payload: UpdateFeedbackRequest }
   >({
     ...options,
-    // BE 연결됨 (AdminFeedbackController PATCH /v1/admin/feedback/{id}). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminFeedbackController PATCH /v1/admin/feedbacks/{id}). VITE_USE_MOCK=true 면 mock.
     mutationFn: isMockMode()
       ? ({ id, payload }) => {
           // mock — 새 객체를 만들어 반환(+ mockFeedbacks 항목 교체)해 재조회/리렌더가 확실하도록
@@ -982,7 +1013,7 @@ export function useBlocks(
 ) {
   return useQuery<PageResponse<BlockEntry>, NormalizedError>({
     queryKey: QUERY_KEYS.BLOCKS(params),
-    // BE 연결됨 (AdminBlockController GET /v1/admin/block). VITE_USE_MOCK=true 면 mock.
+    // BE 연결됨 (AdminBlockController GET /v1/admin/blocks). VITE_USE_MOCK=true 면 mock.
     queryFn: isMockMode() ? mocked(mockBlocksPage) : () => blockBeApi.getBlocks(params),
     placeholderData: mockBlocksPage,
     ...options,

@@ -32,18 +32,22 @@ export default function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
+  // body 스크롤 잠금 — mount/unmount 1회. cleanup 은 prev 캡처 대신 '' 로 강제 복원
+  // (Modal 과 동시에 떴다 닫힐 때 prev='hidden' 으로 누적 캡처되어 영구 잠금되는 버그 방지).
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (pending) return
       if (e.key === 'Escape') onCancel()
     }
     document.addEventListener('keydown', handler)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', handler)
-      document.body.style.overflow = prev
-    }
+    return () => document.removeEventListener('keydown', handler)
   }, [onCancel, pending])
 
   const confirmBtnClass =

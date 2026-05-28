@@ -173,3 +173,12 @@ input, select, textarea {
     @apply bg-surface-alt;
   }
 }
+
+/* 신고 목록에서 ?focus=N 으로 진입 시 해당 댓글에 잠깐 하이라이트 (BalGameComments). */
+@keyframes highlightPulse {
+  0%, 100% { background-color: transparent; }
+  30%, 70% { background-color: rgba(150, 134, 191, 0.18); }
+}
+.highlight-pulse {
+  animation: highlightPulse 1s ease-in-out 2;
+}

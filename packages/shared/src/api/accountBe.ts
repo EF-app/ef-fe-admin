@@ -39,15 +39,13 @@ interface SpringPage<T> {
 }
 
 // BE AdminAccountRspDto (camelCase) — BE 응답에 uuid/role/phone/deactivated_* 없음.
-// 주의: BE 의 `private boolean isActive` 가 Jackson 기본 룰로 `active` 키로 직렬화되는 경우가 있어
-// active/isActive 둘 다 옵션으로 두고 toAdminAccount 에서 수용.
+// BE 필드가 `Boolean isActive` 라서 JSON 키도 `isActive`.
 interface BeAdminAccount {
   id: number;
   loginId: string;
   name: string;
   email: string | null;
-  isActive?: boolean;
-  active?: boolean;
+  isActive: boolean;
   lockedUntil?: string | null;
   recentPasswordFailureCount?: number;
   lastLoginAt: string | null;
@@ -73,7 +71,7 @@ function toAdminAccount(be: BeAdminAccount): AdminAccount {
     email: be.email ?? '',
     phone: '',
     role: ADMIN_ROLE.ADMIN,
-    is_active: be.isActive ?? be.active ?? false,
+    is_active: be.isActive ?? false,
     locked_until: be.lockedUntil ?? null,
     recent_password_failure_count: be.recentPasswordFailureCount ?? 0,
     deactivated_at: null,

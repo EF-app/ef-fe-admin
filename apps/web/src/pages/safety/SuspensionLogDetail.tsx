@@ -49,7 +49,7 @@ export default function SuspensionLogDetailPage() {
     <>
       <div className="flex items-center gap-2 mb-2">
         <button onClick={() => navigate('/suspensions')} className="btn btn-ghost btn-sm">
-          <ArrowLeft size={14} /> 제재 로그
+          <ArrowLeft size={14} /> 제재 관리
         </button>
       </div>
       <Topbar
@@ -60,32 +60,44 @@ export default function SuspensionLogDetailPage() {
       <div className="card mb-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-[13px]">
           <Field label="대상 유저">
-            {log.user_uuid ? (
-              <button
-                onClick={() => navigate(`/users/${log.user_uuid}`)}
-                className="font-extrabold text-point-dark hover:underline"
-              >
-                {log.user_nickname ?? '-'}
-              </button>
-            ) : (
-              <span className="font-extrabold">{log.user_nickname ?? '-'}</span>
-            )}
+            <button
+              onClick={() => navigate(`/users/${log.user_id}`)}
+              className="font-extrabold text-point-dark hover:underline text-left"
+            >
+              {log.user_nickname ?? '-'}
+            </button>
+            <div className="text-[11px] text-text-soft mt-0.5">
+              #{log.user_id} · @{log.user_login_id ?? '-'}
+            </div>
           </Field>
           <Field label="유형">
             <SuspensionTypeBadge type={log.suspension_type} />
           </Field>
           <Field label="상태">
-            {log.is_lifted ? (
-              <Badge tone="normal">해제됨</Badge>
-            ) : (
+            {!log.is_lifted ? (
               <Badge tone="warn">진행 중</Badge>
+            ) : log.lifted_by_admin_id == null ? (
+              <Badge tone="neutral">자동 만료</Badge>
+            ) : (
+              <Badge tone="normal">수동 해제</Badge>
             )}
           </Field>
           <Field label="시작">{formatDateTime(log.starts_at)}</Field>
           <Field label="종료">
             {log.ends_at ? formatDateTime(log.ends_at) : '영구'}
           </Field>
-          <Field label="제재한 관리자">{log.created_by_admin_name ?? '-'}</Field>
+          <Field label="제재한 관리자">
+            {log.created_by_admin_id && log.created_by_admin_id > 0 ? (
+              <button
+                onClick={() => navigate(`/admin/account/${log.created_by_admin_id}`)}
+                className="font-extrabold text-point-dark hover:underline text-left"
+              >
+                {log.created_by_admin_name ?? '-'}
+              </button>
+            ) : (
+              <span>{log.created_by_admin_name ?? '-'}</span>
+            )}
+          </Field>
         </div>
       </div>
 
@@ -98,17 +110,37 @@ export default function SuspensionLogDetailPage() {
 
       {log.is_lifted ? (
         <div className="card mb-4">
-          <div className="text-[11px] text-text-soft font-bold mb-2">해제 정보</div>
+          <div className="text-[11px] text-text-soft font-bold mb-2">
+            {log.lifted_by_admin_id == null ? '자동 만료 정보' : '수동 해제 정보'}
+          </div>
           <div className="bg-surface-alt rounded-md p-4 text-[12.5px] space-y-1.5">
             <div>
               해제 시각: <strong>{log.lifted_at ? formatDateTime(log.lifted_at) : '-'}</strong>
             </div>
-            <div>
-              해제한 관리자: <strong>{log.lifted_by_admin_name ?? '-'}</strong>
-            </div>
-            <div className="whitespace-pre-wrap">
-              사유: {log.lifted_reason ?? '-'}
-            </div>
+            {log.lifted_by_admin_id == null ? (
+              <div className="text-text-soft">
+                ends_at 도달로 배치가 자동 해제했습니다.
+              </div>
+            ) : (
+              <>
+                <div>
+                  해제한 관리자:{' '}
+                  {log.lifted_by_admin_id ? (
+                    <button
+                      onClick={() => navigate(`/admin/account/${log.lifted_by_admin_id}`)}
+                      className="font-extrabold text-point-dark hover:underline"
+                    >
+                      {log.lifted_by_admin_name ?? '-'}
+                    </button>
+                  ) : (
+                    <strong>{log.lifted_by_admin_name ?? '-'}</strong>
+                  )}
+                </div>
+                <div className="whitespace-pre-wrap">
+                  사유: {log.lifted_reason ?? '-'}
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : (

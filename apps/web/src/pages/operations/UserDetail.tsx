@@ -5,8 +5,6 @@ import {
   Ban,
   ShieldOff,
   Crown,
-  Sparkles,
-  Wallet,
   MessageSquare,
   StickyNote,
   Scale,
@@ -23,19 +21,23 @@ import {
   Smartphone,
   CheckCircle2,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import {
   useUserDetail,
   useUserBalComments,
   usePostItsBe,
   useSuspendUserMutation,
-  useLiftSuspensionMutation,
+  useLiftAllSuspensionsForUserMutation,
   useCancelWithdrawalMutation,
   useHidePostItBeMutation,
+  useApproveProfileMutation,
+  useRejectProfileMutation,
   formatDateTime,
   formatDate,
   formatCurrency,
   formatNumber,
+  PROFILE_STATUS_LABEL,
   SUSPENSION_TYPE,
   SUSPENSION_TYPE_LABEL,
   POST_IT_CATEGORY_LABEL,
@@ -45,6 +47,9 @@ import {
   LOGIN_FAILURE_REASON_LABEL,
   validators,
   calcSuspensionEndsAt,
+  previewWarningEscalation,
+  WARNING_WINDOW_DAYS,
+  WARNING_THRESHOLD,
   TEMPORARY_DURATION_OPTIONS,
 } from '@ef-fe-admin/shared'
 import type {
@@ -54,6 +59,7 @@ import type {
   ReportStatus,
   LoginDevice,
   LoginFailureReason,
+  ProfileStatus,
   UserDetail as UserDetailType,
   UserPhoto,
   PostItBe,
@@ -64,9 +70,24 @@ import Pagination from '../../components/ui/Pagination'
 import Modal from '../../components/ui/Modal'
 import { UserStatusBadge, Badge } from '../../components/ui/Badge'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SuspendInlineModal from '../../components/suspension/SuspendInlineModal'
 import UserProfilePanel from '../../components/user/UserProfilePanel'
 
 const PAGE_SIZE = 10
+
+/** 긴 본문을 max 글자로 자르고 … 추가. */
+function truncate(s: string | null | undefined, max: number): string {
+  if (!s) return ''
+  return s.length > max ? `${s.slice(0, max)}…` : s
+}
+
+/** Integer YYYYMMDD (예: 19980314) → "1998-03-14". 0/null/유효성 안 맞으면 '미입력'. */
+function formatBirth(birth?: number | null): string {
+  if (birth == null || birth <= 0) return '미입력'
+  const s = String(birth)
+  if (s.length !== 8) return '미입력'
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+}
 
 type MatchHistory = NonNullable<UserDetailType['recent_matches']>
 type Suspensions = NonNullable<UserDetailType['suspensions']>
@@ -90,16 +111,26 @@ export default function UserDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [liftReason, setLiftReason] = useState('')
   const [liftMode, setLiftMode] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
 
   const suspendMutation = useSuspendUserMutation({
     onSuccess: () => {
       setSuspendMode(false)
       setReason('')
+      setEscalateConfirmOpen(false)
+      setSuspendConfirmOpen(false)
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => {
+      setError(e.message)
+      setEscalateConfirmOpen(false)
+      setSuspendConfirmOpen(false)
+    },
   })
-  const liftMutation = useLiftSuspensionMutation({
+  const [escalateConfirmOpen, setEscalateConfirmOpen] = useState(false)
+  const escalation = previewWarningEscalation(
+    user?.recent_warning_count ?? 0,
+    user?.last_temporary_duration_days ?? null,
+  )
+  const liftMutation = useLiftAllSuspensionsForUserMutation({
     onSuccess: () => {
       setLiftMode(false)
       setLiftReason('')
@@ -108,11 +139,9 @@ export default function UserDetailPage() {
   })
   const cancelWithdrawalMutation = useCancelWithdrawalMutation()
   const [confirmCancelWithdrawOpen, setConfirmCancelWithdrawOpen] = useState(false)
+  const [suspendConfirmOpen, setSuspendConfirmOpen] = useState(false)
 
-  const handleSuspend = () => {
-    setError(null)
-    const reasonCheck = validators.suspensionReason(reason)
-    if (!reasonCheck.valid) return setError(reasonCheck.message ?? '')
+  const submitSuspension = () => {
     if (userId == null) return
     suspendMutation.mutate({
       uuid: userId,
@@ -124,12 +153,26 @@ export default function UserDetailPage() {
     })
   }
 
+  const handleSuspend = () => {
+    setError(null)
+    const reasonCheck = validators.suspensionReason(reason)
+    if (!reasonCheck.valid) return setError(reasonCheck.message ?? '')
+    if (userId == null) return
+    // 에스컬레이션 케이스면 강한 경고 모달, 그 외엔 일반 부과 확인 모달
+    if (type === 'WARNING' && escalation.willEscalate) {
+      setEscalateConfirmOpen(true)
+      return
+    }
+    setSuspendConfirmOpen(true)
+  }
+
   const handleLift = () => {
-    if (!user?.active_suspension) return
+    if (!user?.active_suspension || userId == null) return
     setError(null)
     if (!liftReason.trim()) return setError('해제 사유를 입력해주세요.')
+    // WARNING 제외, TEMPORARY/PERMANENT 모두 일괄 해제
     liftMutation.mutate({
-      id: user.active_suspension.id,
+      userId,
       payload: { lifted_reason: liftReason },
     })
   }
@@ -152,15 +195,49 @@ export default function UserDetailPage() {
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-3">
         <button onClick={() => navigate('/users')} className="btn btn-ghost btn-sm">
-          <ArrowLeft size={14} /> 유저 목록
+          <ArrowLeft size={14} /> 유저 목록으로
         </button>
       </div>
 
-      <Topbar title="유저 상세 / 유저 활동" />
+      {/* ===== 상단 풀폭 헤더 — 아바타 / 이름 / 식별자 / 액션 ===== */}
+      <UserHeader
+        user={user}
+        isPremiumActive={isPremiumActive}
+        onWithdrawCancelClick={() => setConfirmCancelWithdrawOpen(true)}
+        withdrawCancelPending={cancelWithdrawalMutation.isPending}
+        onSuspendClick={() => {
+          setSuspendMode(true)
+          setLiftMode(false)
+        }}
+        onLiftClick={() => {
+          setLiftMode(true)
+          setSuspendMode(false)
+        }}
+      />
 
-      {/* ===== 풀폭 배너들 ===== */}
+      {/* ===== 통계 5컬럼 스트립 ===== */}
+      <StatsStrip user={user} isPremiumActive={isPremiumActive} />
+
+      {/* ===== 활성 제재 안내 — 헤더 액션과 별개로 상세 안내 ===== */}
+      {user.active_suspension && (
+        <div className="card mb-3 border-l-4 border-l-danger">
+          <div className="text-[13px] font-extrabold text-danger mb-1">
+            현재 제재 중 ·{' '}
+            {SUSPENSION_TYPE_LABEL[user.active_suspension.suspension_type]}
+          </div>
+          <div className="text-[12.5px]">사유: {user.active_suspension.reason}</div>
+          <div className="text-[11.5px] text-text-soft mt-1">
+            {formatDateTime(user.active_suspension.starts_at)} →{' '}
+            {user.active_suspension.ends_at
+              ? formatDateTime(user.active_suspension.ends_at)
+              : '영구'}
+          </div>
+        </div>
+      )}
+
+      {/* ===== 탈퇴 배너 ===== */}
       {user.is_withdraw && user.withdraw_date && (
         <WithdrawBanner
           withdrawDate={user.withdraw_date}
@@ -169,41 +246,26 @@ export default function UserDetailPage() {
         />
       )}
 
-      {user.active_suspension && (
-        <div className="card mb-4 border-l-4 border-l-danger">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-[13px] font-extrabold text-danger mb-1">
-                현재 제재 중 ·{' '}
-                {SUSPENSION_TYPE_LABEL[user.active_suspension.suspension_type]}
-              </div>
-              <div className="text-[12.5px]">사유: {user.active_suspension.reason}</div>
-              <div className="text-[11.5px] text-text-soft mt-1">
-                {formatDateTime(user.active_suspension.starts_at)} →{' '}
-                {user.active_suspension.ends_at
-                  ? formatDateTime(user.active_suspension.ends_at)
-                  : '영구'}
-              </div>
-            </div>
-            {!liftMode && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setLiftMode(true)
-                  setSuspendMode(false)
-                }}
-              >
-                <ShieldOff size={13} /> 제재 해제
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 제재 발동/해제 인라인 패널 — 풀폭 */}
+      {/* ===== 제재 발동/해제 인라인 폼 ===== */}
       {suspendMode && (
-        <div className="card mb-4 bg-surface-alt">
+        <div className="card mb-3 bg-surface-alt">
           <div className="font-extrabold text-[14px] mb-3">제재 발동</div>
+          {(user.recent_warning_count ?? 0) > 0 && (
+            <div className="mb-3 text-[12px] text-text-sub bg-warn-soft rounded-md px-3 py-2">
+              최근 {WARNING_WINDOW_DAYS}일 경고{' '}
+              <strong className="text-warn-dark">{user.recent_warning_count}</strong>회
+              {' · '}
+              임계치 {WARNING_THRESHOLD}회 누적 시 자동 일시정지
+              {type === 'WARNING' && escalation.willEscalate && (
+                <div className="mt-1 text-warn-dark font-bold">
+                  ⚠ 이번 부과 시 자동 에스컬레이션:{' '}
+                  {escalation.nextType === 'PERMANENT'
+                    ? '영구정지'
+                    : `${escalation.days}일 일시정지`}
+                </div>
+              )}
+            </div>
+          )}
           <div className="mb-3">
             <label className="form-label">제재 유형</label>
             <div className="flex gap-2 flex-wrap">
@@ -262,7 +324,7 @@ export default function UserDetailPage() {
       )}
 
       {liftMode && user.active_suspension && (
-        <div className="card mb-4 bg-surface-alt">
+        <div className="card mb-3 bg-surface-alt">
           <div className="font-extrabold text-[14px] mb-3">제재 해제</div>
           <div className="mb-3">
             <label className="form-label">해제 사유</label>
@@ -289,24 +351,8 @@ export default function UserDetailPage() {
         </div>
       )}
 
-      {/* ===== 사이드바 + 메인 2단 (유저상세웹뷰) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5 items-start">
-        <ProfileSidebar
-          user={user}
-          isPremiumActive={isPremiumActive}
-          onOpenProfile={() => setProfileOpen(true)}
-          onSuspend={() => setSuspendMode(true)}
-          suspendMode={suspendMode}
-        />
-        <MainContent user={user} userId={user.id} />
-      </div>
-
-      {/* 프로필 패널 모달 */}
-      <UserProfilePanel
-        open={profileOpen}
-        userId={user.id}
-        onClose={() => setProfileOpen(false)}
-      />
+      {/* ===== 탭 + 컨텐츠 ===== */}
+      <MainContent user={user} userId={user.id} isPremiumActive={isPremiumActive} />
 
       {confirmCancelWithdrawOpen && (
         <ConfirmDialog
@@ -326,114 +372,187 @@ export default function UserDetailPage() {
           }}
         />
       )}
+
+      {escalateConfirmOpen && escalation.willEscalate && (
+        <ConfirmDialog
+          title="이 WARNING 부과는 자동 에스컬레이션을 일으킵니다"
+          body={
+            `이번 부과로 최근 ${WARNING_WINDOW_DAYS}일 누적 경고가 ${WARNING_THRESHOLD}회에 도달합니다.\n` +
+            `자동으로 ${
+              escalation.nextType === 'PERMANENT'
+                ? '영구정지'
+                : `${escalation.days}일 일시정지`
+            }가 추가 부과됩니다.\n\n그래도 부과하시겠습니까?`
+          }
+          confirmLabel="예, 부과"
+          tone="danger"
+          pending={suspendMutation.isPending}
+          onCancel={() => setEscalateConfirmOpen(false)}
+          onConfirm={submitSuspension}
+        />
+      )}
+
+      {suspendConfirmOpen && (
+        <ConfirmDialog
+          title="제재하시겠습니까?"
+          body={
+            `${user.nickname ?? ''} 에게 ${SUSPENSION_TYPE_LABEL[type]}${
+              type === 'TEMPORARY' ? ` ${durationDays}일` : ''
+            } 을(를) 부과합니다.\n사유: ${reason}`
+          }
+          confirmLabel="예, 부과"
+          tone="danger"
+          pending={suspendMutation.isPending}
+          onCancel={() => setSuspendConfirmOpen(false)}
+          onConfirm={submitSuspension}
+        />
+      )}
     </>
   )
 }
 
-/* ===== 좌측 sticky 사이드바 ===== */
-function ProfileSidebar({
+/* ===== 상단 헤더 — 아바타 / 이름 / 식별자 / 액션 ===== */
+function UserHeader({
   user,
   isPremiumActive,
-  onOpenProfile,
-  onSuspend,
-  suspendMode,
+  onWithdrawCancelClick,
+  withdrawCancelPending,
+  onSuspendClick,
+  onLiftClick,
 }: {
   user: UserDetailType
   isPremiumActive: boolean
-  onOpenProfile: () => void
-  onSuspend: () => void
-  suspendMode: boolean
+  onWithdrawCancelClick: () => void
+  withdrawCancelPending: boolean
+  onSuspendClick: () => void
+  onLiftClick: () => void
 }) {
+  const initial = user.nickname?.[0] ?? '?'
+  const mainPhoto = (user.photos ?? []).find((p) => p.is_main) ?? user.photos?.[0]
+
   return (
-    <aside className="lg:sticky lg:top-4 space-y-3">
-      {/* 프로필 카드 */}
-      <div className="card p-4">
-        <div className="flex flex-col gap-3 pb-3 border-b border-border">
-          <ProfilePhotoBlock photos={user.photos ?? []} nickname={user.nickname} />
-          <div className="min-w-0 w-full text-center">
-            <div className="font-extrabold text-[16px] truncate">{user.nickname}</div>
-            <div className="flex items-center justify-center gap-1 flex-wrap mt-1.5">
-              <UserStatusBadge status={user.status} />
-              {isPremiumActive && (
-                <Badge tone="warn">
-                  <Crown size={9} className="inline" /> 프리미엄
-                </Badge>
-              )}
-              {user.is_withdraw && <Badge tone="neutral">탈퇴</Badge>}
-            </div>
+    <div className="card mb-3">
+      <div className="flex items-start gap-4 flex-wrap">
+        {/* 아바타 — 메인 사진 우선, 없으면 이니셜 */}
+        <div className="w-16 h-16 rounded-full bg-point text-white flex items-center justify-center font-black text-[28px] flex-shrink-0 overflow-hidden">
+          {mainPhoto ? (
+            <img src={mainPhoto.url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            initial
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* 이름 + 상태 배지 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="font-extrabold text-[18px] truncate">{user.nickname}</div>
+            <UserStatusBadge status={user.status} />
+            {isPremiumActive && (
+              <Badge tone="warn">
+                <Crown size={9} className="inline" /> 프리미엄
+              </Badge>
+            )}
+            {user.is_withdraw && <Badge tone="neutral">탈퇴</Badge>}
+          </div>
+
+          {/* ID + UUID */}
+          <div className="flex items-center gap-3 text-[12px] text-text-soft mt-1 flex-wrap">
+            <span>
+              <span className="text-text-soft">ID</span>{' '}
+              <span className="font-bold text-text-sub">#{user.id}</span>
+            </span>
+            <span className="text-text-soft">·</span>
+            <span className="font-mono text-[11.5px]" title={user.uuid}>
+              {user.uuid}
+            </span>
+            <span className="text-text-soft">·</span>
+            <span className="text-text-sub">@{user.login_id}</span>
           </div>
         </div>
 
-        <dl className="pt-3 space-y-2 text-[12px]">
-          <SidebarRow label="UUID" mono value={user.uuid} />
-          <SidebarRow label="로그인 ID" value={user.login_id} />
-          <SidebarRow label="나이" value={`${user.age}세`} />
-          <SidebarRow label="지역" value={user.area ?? '미입력'} />
-          <SidebarRow label="직업" value={user.job ?? '미입력'} />
-        </dl>
-      </div>
-
-      <div className="card p-4">
-        <div className="text-[10.5px] font-extrabold text-text-soft tracking-wider uppercase mb-3">
-          결제 · 구독
+        {/* 우측 액션 영역 */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {user.is_withdraw && (
+            <button
+              className="btn btn-warn btn-sm"
+              onClick={onWithdrawCancelClick}
+              disabled={withdrawCancelPending}
+            >
+              <UserCog size={13} /> 탈퇴 철회
+            </button>
+          )}
+          {user.active_suspension ? (
+            <button className="btn btn-secondary btn-sm" onClick={onLiftClick}>
+              <ShieldOff size={13} /> 제재 해제
+            </button>
+          ) : (
+            <button className="btn btn-danger btn-sm" onClick={onSuspendClick}>
+              <Ban size={13} /> 제재 발동
+            </button>
+          )}
         </div>
-        <dl className="space-y-2.5 text-[12.5px]">
-          <SidebarStat
-            icon={<Wallet size={12} />}
-            label="총 결제"
-            value={formatCurrency(user.payment_total ?? 0)}
-          />
-          <SidebarStat
-            icon={<Crown size={12} />}
-            label="프리미엄"
-            value={
-              isPremiumActive ? `~ ${formatDate(user.premium_until!)}` : '미가입'
-            }
-            tone={isPremiumActive ? 'point' : undefined}
-          />
-          <SidebarStat
-            icon={<Sparkles size={12} />}
-            label="잉크"
-            value={`${formatNumber(user.ink_balance ?? 0)}`}
-          />
-        </dl>
       </div>
+    </div>
+  )
+}
 
-      <div className="card p-4">
-        <div className="text-[10.5px] font-extrabold text-text-soft tracking-wider uppercase mb-3">
-          접속 / 가입
-        </div>
-        <dl className="space-y-2 text-[12px]">
-          <SidebarRow label="가입" value={formatDateTime(user.create_time)} />
-          <SidebarRow
-            label="최근 접속"
-            value={formatDateTime(user.last_login_time)}
-          />
-        </dl>
+/* ===== 통계 5컬럼 스트립 ===== */
+function StatsStrip({
+  user,
+  isPremiumActive,
+}: {
+  user: UserDetailType
+  isPremiumActive: boolean
+}) {
+  return (
+    <div className="card mb-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <StatCell label="가입일" value={formatDate(user.create_time)} />
+        <StatCell label="최근 접속" value={formatDateTime(user.last_login_time)} />
+        <StatCell label="잉크 잔액" value={`${formatNumber(user.ink_balance ?? 0)}`} />
+        <StatCell
+          label="총 결제 금액"
+          value={formatCurrency(user.payment_total ?? 0)}
+        />
+        <StatCell
+          label="프리미엄"
+          value={
+            isPremiumActive
+              ? `~ ${formatDate(user.premium_until!)}`
+              : '미가입'
+          }
+          tone={isPremiumActive ? 'point' : undefined}
+        />
       </div>
+    </div>
+  )
+}
 
-      <div className="card p-4 space-y-2">
-        <button
-          className="btn btn-secondary btn-sm w-full justify-center"
-          onClick={onOpenProfile}
-        >
-          <Eye size={13} /> 프로필 보기
-        </button>
-        {!user.active_suspension && !suspendMode && (
-          <button
-            className="btn btn-danger btn-sm w-full justify-center"
-            onClick={onSuspend}
-          >
-            <Ban size={13} /> 제재 발동
-          </button>
-        )}
+function StatCell({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone?: 'point'
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-text-soft font-bold mb-1">{label}</div>
+      <div
+        className={`text-[14px] font-extrabold break-all ${
+          tone === 'point' ? 'text-point-dark' : ''
+        }`}
+      >
+        {value}
       </div>
-    </aside>
+    </div>
   )
 }
 
 /**
- * 사이드바 사진 영역 — 큰 정사각형 메인 + 가로 썸네일 스트립.
+ * 프로필 탭용 — 큰 정사각형 메인 + 가로 썸네일 스트립.
  * is_main = true 사진을 우선 노출. 사진 없으면 닉네임 이니셜 fallback.
  */
 function ProfilePhotoBlock({
@@ -492,126 +611,115 @@ function ProfilePhotoBlock({
   )
 }
 
-function SidebarRow({
+function InfoRow({
   label,
   value,
-  mono = false,
 }: {
   label: string
-  value: string
-  mono?: boolean
+  value: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex items-start justify-between gap-3 text-[12.5px]">
       <dt className="text-text-soft flex-shrink-0">{label}</dt>
-      <dd
-        className={`font-bold text-right break-all min-w-0 ${
-          mono ? 'font-mono text-[11px]' : ''
-        }`}
-      >
-        {value}
-      </dd>
+      <dd className="font-bold text-right break-all min-w-0">{value}</dd>
     </div>
   )
 }
 
-function SidebarStat({
-  icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  tone?: 'point'
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-1.5 text-text-soft">
-        <span className="text-text-soft">{icon}</span>
-        <span>{label}</span>
-      </div>
-      <div
-        className={`font-extrabold text-right ${
-          tone === 'point' ? 'text-point-dark' : ''
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  )
-}
-
-/* ===== 우측 메인 — 상단 탭 ===== */
-type MainTab = 'matches' | 'content' | 'access' | 'reports' | 'blocks'
+/* ===== 메인 — 풀폭 탭 ===== */
+type MainTab =
+  | 'profile'
+  | 'matches'
+  | 'content'
+  | 'access'
+  | 'suspensions'
+  | 'reports'
+  | 'blocks'
 
 function MainContent({
   user,
   userId,
+  isPremiumActive,
 }: {
   user: UserDetailType
   userId: number
+  isPremiumActive: boolean
 }) {
-  const [tab, setTab] = useState<MainTab>('matches')
+  const [tab, setTab] = useState<MainTab>('profile')
 
   const matchCount = user.recent_matches?.length ?? 0
   const reports = user.recent_reports ?? []
   const madeReports = user.recent_made_reports ?? []
   const blocks = user.blocks ?? []
   const blockedBy = user.blocked_by ?? []
+  const suspensions = user.suspensions ?? []
+  const loginLogs = user.recent_login_logs ?? []
 
   return (
-    <div className="card p-0">
-      <div className="border-b border-border px-2 flex items-center flex-wrap">
-        <TopTab
-          active={tab === 'matches'}
-          onClick={() => setTab('matches')}
-          icon={<MessageSquare size={14} />}
-          label="매칭 이력"
-          suffix={`(${matchCount})`}
-        />
-        <TopTab
-          active={tab === 'content'}
-          onClick={() => setTab('content')}
-          icon={<StickyNote size={14} />}
-          label="작성한 글"
-        />
-        <TopTab
-          active={tab === 'access'}
-          onClick={() => setTab('access')}
-          icon={<ShieldAlert size={14} />}
-          label="접속·제재"
-        />
-        <TopTab
-          active={tab === 'reports'}
-          onClick={() => setTab('reports')}
-          icon={<AlertTriangle size={14} />}
-          label="신고"
-          suffix={`(${reports.length + madeReports.length})`}
-        />
-        <TopTab
-          active={tab === 'blocks'}
-          onClick={() => setTab('blocks')}
-          icon={<UserX size={14} />}
-          label="차단"
-          suffix={`(${blocks.length + blockedBy.length})`}
-        />
+    <>
+      {/* 탭 행 (별도 카드) */}
+      <div className="card mb-3 p-0">
+        <div className="px-2 flex items-center flex-wrap">
+          <TopTab
+            active={tab === 'profile'}
+            onClick={() => setTab('profile')}
+            icon={<UserCog size={14} />}
+            label="프로필"
+          />
+          <TopTab
+            active={tab === 'matches'}
+            onClick={() => setTab('matches')}
+            icon={<MessageSquare size={14} />}
+            label="매칭이력"
+            suffix={`(${matchCount})`}
+          />
+          <TopTab
+            active={tab === 'content'}
+            onClick={() => setTab('content')}
+            icon={<StickyNote size={14} />}
+            label="작성한글"
+          />
+          <TopTab
+            active={tab === 'access'}
+            onClick={() => setTab('access')}
+            icon={<Monitor size={14} />}
+            label="접속이력"
+          />
+          <TopTab
+            active={tab === 'suspensions'}
+            onClick={() => setTab('suspensions')}
+            icon={<ShieldAlert size={14} />}
+            label="제재이력"
+            suffix={`(${suspensions.length})`}
+          />
+          <TopTab
+            active={tab === 'reports'}
+            onClick={() => setTab('reports')}
+            icon={<AlertTriangle size={14} />}
+            label="신고이력"
+            suffix={`(${reports.length + madeReports.length})`}
+          />
+          <TopTab
+            active={tab === 'blocks'}
+            onClick={() => setTab('blocks')}
+            icon={<UserX size={14} />}
+            label="차단이력"
+            suffix={`(${blocks.length + blockedBy.length})`}
+          />
+        </div>
       </div>
 
-      <div className="p-5">
+      {/* 탭 컨텐츠 (별도 카드) */}
+      <div className="card">
+        {tab === 'profile' && <ProfileTab user={user} isPremiumActive={isPremiumActive} />}
         {tab === 'matches' && (
           <MatchHistoryTable matches={user.recent_matches ?? []} />
         )}
         {tab === 'content' && (
           <WrittenContentTabs userId={userId} userNickname={user.nickname} />
         )}
-        {tab === 'access' && (
-          <AccessAndSuspensionTabs
-            loginLogs={user.recent_login_logs ?? []}
-            suspensions={user.suspensions ?? []}
-          />
-        )}
+        {tab === 'access' && <LoginLogList items={loginLogs} />}
+        {tab === 'suspensions' && <SuspensionList items={suspensions} />}
         {tab === 'reports' && (
           <ReportTabs reports={reports} madeReports={madeReports} />
         )}
@@ -619,6 +727,122 @@ function MainContent({
           <BlockTabs blocks={blocks} blockedBy={blockedBy} />
         )}
       </div>
+    </>
+  )
+}
+
+/* ===== 프로필 탭 — 좌(사진 + BIO + 프로필 보기 + 기본정보) / 우(결제·구독) ===== */
+function ProfileTab({
+  user,
+  isPremiumActive,
+}: {
+  user: UserDetailType
+  isPremiumActive: boolean
+}) {
+  const profile = user.profile
+  const [profileOpen, setProfileOpen] = useState(false)
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+      {/* 좌측: [프로필 보기] → 사진 (BIO 는 우측 정보 영역 아래로 이동) */}
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setProfileOpen(true)}
+          className="btn btn-secondary btn-sm w-full justify-center"
+        >
+          프로필 보기
+        </button>
+
+        <ProfilePhotoBlock photos={user.photos ?? []} nickname={user.nickname} />
+
+        <UserProfilePanel
+          open={profileOpen}
+          userId={user.id}
+          onClose={() => setProfileOpen(false)}
+          actions={
+            <ProfileReviewActions
+              userId={user.id}
+              currentStatus={user.profile_status}
+            />
+          }
+        />
+      </div>
+
+      {/* 우측: (위) 기본정보 / 결제·구독+접속·가입 2단  →  (아래) BIO 전체 폭 */}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* 좌: 기본 정보 */}
+          <section>
+            <SectionHeader>기본 정보</SectionHeader>
+            <dl className="space-y-4">
+              <InfoRow label="UUID" value={<span className="font-mono text-[11.5px]">{user.uuid}</span>} />
+              <InfoRow label="상태" value={<UserStatusBadge status={user.status} />} />
+              <InfoRow label="닉네임" value={user.nickname} />
+              <InfoRow label="로그인 ID" value={user.login_id} />
+              <InfoRow label="나이" value={`${user.age}세`} />
+              <InfoRow label="생일" value={formatBirth(user.birth)} />
+              <InfoRow label="이메일" value={user.email ?? '미입력'} />
+              <InfoRow label="지역" value={user.area ?? '미입력'} />
+              <InfoRow label="전화번호" value={user.phone || '미입력'} />
+              {user.is_withdraw && (
+                <InfoRow
+                  label="탈퇴일"
+                  value={user.withdraw_date ? formatDateTime(user.withdraw_date) : '-'}
+                />
+              )}
+            </dl>
+          </section>
+
+          {/* 우: 결제·구독 + 접속·가입 (세로 스택) */}
+          <div className="space-y-5">
+            <section>
+              <SectionHeader>결제 · 구독</SectionHeader>
+              <dl className="space-y-4">
+                <InfoRow
+                  label="총 결제 금액"
+                  value={formatCurrency(user.payment_total ?? 0)}
+                />
+                <InfoRow
+                  label="프리미엄"
+                  value={
+                    isPremiumActive
+                      ? `~ ${formatDate(user.premium_until!)}`
+                      : '미가입'
+                  }
+                />
+                <InfoRow
+                  label="잉크 잔액"
+                  value={`${formatNumber(user.ink_balance ?? 0)}`}
+                />
+              </dl>
+            </section>
+
+            <section>
+              <SectionHeader>접속 / 가입</SectionHeader>
+              <dl className="space-y-4">
+                <InfoRow label="가입" value={formatDateTime(user.create_time)} />
+                <InfoRow label="최근 접속" value={formatDateTime(user.last_login_time)} />
+              </dl>
+            </section>
+          </div>
+        </div>
+
+        {/* BIO — 우측 영역 전체 폭, 정보 카드들 아래 */}
+        <section>
+          <SectionHeader>BIO</SectionHeader>
+          <div className="bg-surface-alt rounded-md p-3 text-[12.5px] whitespace-pre-wrap break-words min-h-[60px]">
+            {profile?.bio_message || '미입력'}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[11px] font-extrabold text-text-soft tracking-wider uppercase mb-3">
+      {children}
     </div>
   )
 }
@@ -1015,7 +1239,7 @@ function BalCommentList({
                               className="btn btn-secondary btn-sm"
                               onClick={() =>
                                 onSuspend(
-                                  `밸런스 댓글 #${c.id} (${g.optionA} vs ${g.optionB}) — `
+                                  `밸런스 댓글 #${c.id} (${g.optionA} vs ${g.optionB})\n본문: "${truncate(c.content, 200)}"\n사유: `
                                 )
                               }
                             >
@@ -1101,7 +1325,7 @@ function PostItList({
                         className="btn btn-secondary btn-sm"
                         onClick={() =>
                           onSuspend(
-                            `포스트잇 #${p.id} (${POST_IT_CATEGORY_LABEL[p.categoryCode as PostItCategory] ?? p.categoryCode}) — `
+                            `포스트잇 #${p.id} (${POST_IT_CATEGORY_LABEL[p.categoryCode as PostItCategory] ?? p.categoryCode})\n본문: "${truncate(p.content, 200)}"\n사유: `
                           )
                         }
                       >
@@ -1133,131 +1357,6 @@ function PostItList({
           }
         />
       )}
-    </>
-  )
-}
-
-/* ===== 작성글에서 호출되는 인라인 제재 모달 — 컨텍스트 자동 prefill ===== */
-function SuspendInlineModal({
-  userId,
-  userNickname,
-  contextPrefill,
-  onClose,
-}: {
-  userId: number
-  userNickname: string
-  contextPrefill: string
-  onClose: () => void
-}) {
-  const [type, setType] = useState<SuspensionType>('WARNING')
-  const [durationDays, setDurationDays] = useState(7)
-  const [reason, setReason] = useState(contextPrefill)
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useSuspendUserMutation({
-    onSuccess: onClose,
-    onError: (e) => setError(e.message),
-  })
-
-  const handleSubmit = () => {
-    setError(null)
-    const check = validators.suspensionReason(reason)
-    if (!check.valid) return setError(check.message ?? '')
-    mutation.mutate({
-      uuid: userId,
-      payload: {
-        suspension_type: type,
-        reason,
-        ends_at: calcSuspensionEndsAt(type, type === 'TEMPORARY' ? durationDays : undefined),
-      },
-    })
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`작성자 제재 — ${userNickname}`} maxWidth={520}>
-      <div className="space-y-3">
-        <div className="bg-surface-alt rounded-md p-3 text-[12px] text-text-sub">
-          이 콘텐츠를 근거로 <strong>{userNickname}</strong> 에게 제재를 적용합니다.
-        </div>
-        <div>
-          <label className="form-label">제재 유형</label>
-          <div className="flex gap-2 flex-wrap">
-            {(Object.keys(SUSPENSION_TYPE) as SuspensionType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`chip ${type === t ? 'active' : ''}`}
-                onClick={() => setType(t)}
-              >
-                {SUSPENSION_TYPE_LABEL[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {type === 'TEMPORARY' && (
-          <div>
-            <label className="form-label">기간</label>
-            <div className="flex gap-2 flex-wrap">
-              {TEMPORARY_DURATION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  type="button"
-                  className={`chip ${durationDays === opt.days ? 'active' : ''}`}
-                  onClick={() => setDurationDays(opt.days)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div>
-          <label className="form-label">사유 (유저 통보)</label>
-          <textarea
-            className="form-textarea"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
-        {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
-            취소
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
-            disabled={mutation.isPending}
-            onClick={handleSubmit}
-          >
-            {mutation.isPending ? '처리 중...' : '제재 발동'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-/* ===== 안전 — 접속 이력 + 제재 ===== */
-function AccessAndSuspensionTabs({
-  loginLogs,
-  suspensions,
-}: {
-  loginLogs: LoginLogs
-  suspensions: Suspensions
-}) {
-  const [tab, setTab] = useState<'login' | 'sus'>('login')
-  return (
-    <>
-      <InnerTabs
-        tabs={[
-          { value: 'login', label: `접속 이력 (${loginLogs.length})`, icon: <Monitor size={12} /> },
-          { value: 'sus', label: `제재 (${suspensions.length})`, icon: <ShieldOff size={12} /> },
-        ]}
-        active={tab}
-        onChange={setTab}
-      />
-      {tab === 'login' && <LoginLogList items={loginLogs} />}
-      {tab === 'sus' && <SuspensionList items={suspensions} />}
     </>
   )
 }
@@ -1376,9 +1475,28 @@ function MadeReportList({ items }: { items: MadeReports }) {
 }
 
 function SuspensionList({ items }: { items: Suspensions }) {
-  const pager = useSearchPager(items, (s, kw) => s.reason.toLowerCase().includes(kw))
+  const navigate = useNavigate()
+  const [typeFilter, setTypeFilter] = useState<SuspensionType | undefined>(undefined)
+  const filtered = useMemo(
+    () => (typeFilter ? items.filter((s) => s.suspension_type === typeFilter) : items),
+    [items, typeFilter],
+  )
+  const pager = useSearchPager(filtered, (s, kw) => s.reason.toLowerCase().includes(kw))
   return (
     <>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-[12px] text-text-soft">유형:</span>
+        {([undefined, 'WARNING', 'TEMPORARY', 'PERMANENT'] as const).map((t) => (
+          <button
+            key={t ?? 'all'}
+            type="button"
+            className={`chip ${typeFilter === t ? 'active' : ''}`}
+            onClick={() => setTypeFilter(t)}
+          >
+            {t == null ? '전체' : SUSPENSION_TYPE_LABEL[t]}
+          </button>
+        ))}
+      </div>
       <SearchBar
         value={pager.keyword}
         onChange={pager.setKeyword}
@@ -1401,7 +1519,11 @@ function SuspensionList({ items }: { items: Suspensions }) {
             </thead>
             <tbody>
               {pager.slice.map((s) => (
-                <tr key={s.id}>
+                <tr
+                  key={s.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/suspensions/${s.id}`)}
+                >
                   <td className="font-extrabold">{SUSPENSION_TYPE_LABEL[s.suspension_type]}</td>
                   <td className="text-text-sub">{s.reason}</td>
                   <td className="text-text-sub">{formatDateTime(s.starts_at)}</td>
@@ -1409,10 +1531,12 @@ function SuspensionList({ items }: { items: Suspensions }) {
                     {s.ends_at ? formatDateTime(s.ends_at) : '영구'}
                   </td>
                   <td>
-                    {s.is_lifted ? (
-                      <Badge tone="normal">해제됨</Badge>
-                    ) : (
+                    {!s.is_lifted ? (
                       <Badge tone="warn">진행 중</Badge>
+                    ) : s.lifted_by_admin_id == null ? (
+                      <Badge tone="neutral">자동 만료</Badge>
+                    ) : (
+                      <Badge tone="normal">수동 해제</Badge>
                     )}
                   </td>
                 </tr>
@@ -1743,4 +1867,141 @@ function LoginLogList({ items }: { items: LoginLogs }) {
 function DeviceIcon({ device }: { device: LoginDevice }) {
   if (device === 'WEB') return <Monitor size={11} className="text-text-soft" />
   return <Smartphone size={11} className="text-text-soft" />
+}
+
+/* ===== 프로필 심사 액션 — UserProfilePanel 의 footer 영역에 주입 ===== */
+function ProfileReviewActions({
+  userId,
+  currentStatus,
+}: {
+  userId: number
+  currentStatus?: ProfileStatus
+}) {
+  const [rejectMode, setRejectMode] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [confirmKind, setConfirmKind] = useState<'approve' | 'reject' | null>(null)
+
+  const approve = useApproveProfileMutation({
+    onSuccess: () => setConfirmKind(null),
+    onError: (e) => {
+      setError(e.message)
+      setConfirmKind(null)
+    },
+  })
+  const reject = useRejectProfileMutation({
+    onSuccess: () => {
+      setConfirmKind(null)
+      setRejectMode(false)
+      setRejectReason('')
+    },
+    onError: (e) => {
+      setError(e.message)
+      setConfirmKind(null)
+    },
+  })
+
+  const handleRejectClick = () => {
+    setError(null)
+    if (!rejectReason.trim()) {
+      setError('반려 사유를 입력해주세요. (유저에게 노출됨)')
+      return
+    }
+    setConfirmKind('reject')
+  }
+
+  return (
+    <div className="space-y-2">
+      {currentStatus && (
+        <div className="text-[11.5px] text-text-soft">
+          현재 상태:{' '}
+          <strong className="text-text-sub">
+            {PROFILE_STATUS_LABEL[currentStatus]}
+          </strong>
+        </div>
+      )}
+
+      {rejectMode ? (
+        // 인라인 반려 사유 입력 폼
+        <div className="space-y-2">
+          <label className="form-label text-[11px]">반려 사유 (유저에 노출)</label>
+          <textarea
+            className="form-textarea"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="예) 프로필 사진이 규정에 맞지 않습니다"
+            style={{ minHeight: 80 }}
+          />
+          {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
+          <div className="flex justify-end gap-2">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setRejectMode(false)
+                setRejectReason('')
+                setError(null)
+              }}
+              disabled={reject.isPending}
+            >
+              취소
+            </button>
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={handleRejectClick}
+              disabled={reject.isPending}
+            >
+              {reject.isPending ? '처리 중...' : '반려'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            className="btn btn-secondary btn-sm opacity-50 cursor-not-allowed"
+            title="부스트 기능은 추후 구현 예정"
+            disabled
+          >
+            <Zap size={13} /> 부스트 부여
+          </button>
+          <div className="flex-1" />
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => setRejectMode(true)}
+            disabled={currentStatus === 'REJECTED'}
+          >
+            반려
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setConfirmKind('approve')}
+            disabled={approve.isPending || currentStatus === 'APPROVED'}
+          >
+            {approve.isPending ? '처리 중...' : '승인'}
+          </button>
+        </div>
+      )}
+
+      {confirmKind === 'approve' && (
+        <ConfirmDialog
+          title="프로필을 승인하시겠습니까?"
+          body="유저의 프로필이 정상 노출됩니다."
+          confirmLabel="예, 승인"
+          pending={approve.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => approve.mutate(userId)}
+        />
+      )}
+      {confirmKind === 'reject' && (
+        <ConfirmDialog
+          title="프로필을 반려하시겠습니까?"
+          body="반려 사유가 유저에게 노출됩니다."
+          confirmLabel="예, 반려"
+          tone="danger"
+          pending={reject.isPending}
+          onCancel={() => setConfirmKind(null)}
+          onConfirm={() => reject.mutate({ userId, reason: rejectReason })}
+        />
+      )}
+    </div>
+  )
 }

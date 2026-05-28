@@ -32,7 +32,7 @@ export const mockUsers: User[] = [
     job: '개발자',
     is_withdraw: false,
     withdraw_date: null,
-    status: 'WARNING',
+    status: 'ACTIVE',
     area: '부산광역시 해운대구',
     last_login_time: '2026-04-19T22:14:00.000Z',
     verified_birth_date: '1994-07-09',
@@ -51,7 +51,7 @@ export const mockUsers: User[] = [
     job: '대학원생',
     is_withdraw: false,
     withdraw_date: null,
-    status: 'TEMP_SUSPENDED',
+    status: 'TEMPORARY',
     area: '서울특별시 관악구',
     last_login_time: '2026-04-18T11:20:00.000Z',
     verified_birth_date: '2001-12-21',
@@ -70,7 +70,7 @@ export const mockUsers: User[] = [
     job: null,
     is_withdraw: true,
     withdraw_date: '2026-04-01T00:00:00.000Z',
-    status: 'PERMANENTLY_SUSPENDED',
+    status: 'PERMANENT',
     area: null,
     last_login_time: '2026-03-30T00:00:00.000Z',
     verified_birth_date: '1996-05-02',
@@ -108,9 +108,9 @@ const mockSuspension: UserSuspension = {
   ends_at: '2026-04-22T00:00:00.000Z',
   is_lifted: false,
   lifted_at: null,
-  lifted_by: null,
+  lifted_by_admin_id: null,
   lifted_reason: null,
-  created_by: 1,
+  created_by_admin_id: 1,
   create_time: '2026-04-15T00:00:00.000Z',
   update_time: '2026-04-15T00:00:00.000Z',
 };
@@ -119,7 +119,7 @@ export const mockUserDetail: UserDetail = {
   ...mockUsers[0],
   profile: {
     user_id: 101,
-    match_purpose: 'BOTH',
+    purpose: 'MIXED',
     bio_message:
       '달밤 산책과 잔잔한 음악을 좋아합니다. 평일엔 한강 자전거, 주말엔 카페에서 책 한 권. 비슷한 결의 친구·인연 모두 환영해요.',
     mbti: 'INFJ',
@@ -139,7 +139,7 @@ export const mockUserDetail: UserDetail = {
     update_time: '2026-01-03T00:00:00.000Z',
 
     // EF-FE profile-creation 확장 필드 (어드민 표시용)
-    interest_target: 'ALL',
+    interest_target: 'MIXED',
     keywords: {
       lifestyle: ['🌿 비건/채식', '🌅 아침형', '📚 독서'],
       hobby: ['☕ 카페 탐방', '🎨 그림 그리기'],

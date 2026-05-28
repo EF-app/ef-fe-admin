@@ -218,8 +218,6 @@ export const mockReports: Report[] = [
   },
 ];
 
-export const mockReportsPage = mockPage(mockReports);
-
 /**
  * 위 신고들을 (target_type, target_id) 로 묶어 그룹 배열 생성.
  * BE 동작 모방: reports 는 시간 ASC, totalCount/pendingCount/first/last 계산.

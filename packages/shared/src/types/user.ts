@@ -5,11 +5,18 @@ import type {
   MatchPurpose,
 } from '../constants/enums';
 
+// re-export — User 타입에서 직접 사용
+export type { ProfileStatus };
+
 export interface User {
   id: number;
   uuid: string;
   login_id: string;
   phone: string;
+  /** 업무 이메일 — BE 응답에 포함 (없으면 null) */
+  email?: string | null;
+  /** 생년월일 정수 (예: 19980314). 별도 표시용. verified_birth_date 와 별개. */
+  birth?: number | null;
   nickname: string;
   nickname_changed_at: string | null;
   age: number;
@@ -17,6 +24,8 @@ export interface User {
   is_withdraw: boolean;
   withdraw_date: string | null;
   status: UserStatus;
+  /** 프로필 심사 상태 — BE user_profile.profile_status (목록 응답에 포함, 없으면 미정) */
+  profile_status?: ProfileStatus;
   /** 지역명 조합 문자열 ("서울특별시 강남구"). 미입력 시 null */
   area: string | null;
   last_login_time: string | null;
@@ -26,8 +35,8 @@ export interface User {
   update_time: string;
 }
 
-/** 관심 대상 — EF-FE profile-creation 의 interestTarget */
-export type InterestTarget = 'ACQUAINTANCE' | 'ALL' | 'LOVER';
+/** 관심 대상 — BE Purpose enum 미러 (com.nokcha.efbe.domain.profile.entity.Purpose). */
+export type InterestTarget = 'LOVE' | 'FRIEND' | 'MIXED';
 
 /** 관심사 키워드 8 그룹 (EF-FE KeywordSet 정합) */
 export interface ProfileKeywordSet {
@@ -43,7 +52,7 @@ export interface ProfileKeywordSet {
 
 export interface UserProfile {
   user_id: number;
-  match_purpose: MatchPurpose;
+  purpose: MatchPurpose;
   bio_message: string | null;
   mbti: string | null;
   /** code_personal 라벨 텍스트 ("가끔 마심" 등). 미입력 시 null */
@@ -121,9 +130,9 @@ export interface UserSuspension {
   ends_at: string | null;
   is_lifted: boolean;
   lifted_at: string | null;
-  lifted_by: number | null;
+  lifted_by_admin_id: number | null;
   lifted_reason: string | null;
-  created_by: number;
+  created_by_admin_id: number;
   create_time: string;
   update_time: string;
 }
@@ -228,6 +237,10 @@ export interface UserDetail extends User {
   photos?: UserPhoto[];
   active_suspension?: UserSuspension | null;
   suspensions?: UserSuspension[];
+  /** 최근 30일 내 WARNING 부과 건수 — WARNING 부과 시 자동 에스컬레이션 사전 경고용 */
+  recent_warning_count?: number;
+  /** 직전 TEMPORARY 제재의 일수. 없으면 null. 자동 에스컬레이션 다음 등급 결정용 */
+  last_temporary_duration_days?: number | null;
   report_count?: number;
   payment_total?: number;
   /** 보유 잉크(별) 잔액 */

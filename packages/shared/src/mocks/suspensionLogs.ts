@@ -18,8 +18,10 @@ export const mockSuspensionLogs: SuspensionLog[] = [
     lifted_reason: null,
     created_by_admin_id: 1,
     created_by_admin_name: '관리자',
+    source_target_type: 'POST_IT',
+    source_target_id: 1234,
+    active: true,
     create_time: '2026-04-15T00:00:00.000Z',
-    update_time: '2026-04-15T00:00:00.000Z',
   },
   {
     id: 9002,
@@ -36,8 +38,10 @@ export const mockSuspensionLogs: SuspensionLog[] = [
     lifted_reason: null,
     created_by_admin_id: 1,
     created_by_admin_name: '관리자',
+    source_target_type: 'PROFILE',
+    source_target_id: 104,
+    active: true,
     create_time: '2026-04-01T00:00:00.000Z',
-    update_time: '2026-04-01T00:00:00.000Z',
   },
   {
     id: 9003,
@@ -54,8 +58,10 @@ export const mockSuspensionLogs: SuspensionLog[] = [
     lifted_reason: null,
     created_by_admin_id: 2,
     created_by_admin_name: '모더레이터',
+    source_target_type: 'BAL_COMMENT',
+    source_target_id: 5678,
+    active: false,
     create_time: '2026-03-25T00:00:00.000Z',
-    update_time: '2026-03-25T00:00:00.000Z',
   },
   {
     id: 9004,
@@ -73,8 +79,10 @@ export const mockSuspensionLogs: SuspensionLog[] = [
     lifted_reason: '이의 신청 수용 (오인 신고로 확인)',
     created_by_admin_id: 2,
     created_by_admin_name: '모더레이터',
+    source_target_type: null,
+    source_target_id: null,
+    active: false,
     create_time: '2026-03-10T00:00:00.000Z',
-    update_time: '2026-03-13T11:20:00.000Z',
   },
 ];
 

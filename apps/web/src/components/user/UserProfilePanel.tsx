@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, ChevronLeft, ChevronRight, Zap, Pencil } from 'lucide-react'
-import {
-  useUserDetail,
-  formatDate,
-  formatDateTime,
-  MATCH_PURPOSE_LABEL,
-  USER_STATUS_LABEL,
-} from '@ef-fe-admin/shared'
+import { useUserDetail } from '@ef-fe-admin/shared'
 import type {
   UserDetail,
   UserProfile,
@@ -127,15 +121,21 @@ function ProfileBody({ user }: { user: UserDetail }) {
 
   return (
     <div className="px-4 py-5 space-y-3.5">
-      {/* 완성도 바 */}
-      {p?.completion != null && (
-        <CompletionBar value={p.completion} hint={p.completion_hint} />
-      )}
-
-      {/* Hero */}
+      {/* Hero — 사진 + 닉네임/나이/지역 (직업 제거) */}
       <Hero user={user} />
 
-      {/* 관심 대상 — 미입력이어도 항목은 항상 노출 */}
+      {/* 한 줄 소개 (선택) */}
+      <Section label="한 줄 소개">
+        {p?.bio_message ? (
+          <div className="bg-surface rounded-[18px] px-4 py-3.5 text-[13.5px] border border-border leading-relaxed">
+            "{p.bio_message}"
+          </div>
+        ) : (
+          <EmptyCard />
+        )}
+      </Section>
+
+      {/* 관심 대상 (필수) */}
       <Section label="관심 대상">
         {p?.interest_target ? (
           <div className="bg-surface rounded-[18px] px-4 py-3.5 border border-border flex items-center gap-3">
@@ -154,30 +154,14 @@ function ProfileBody({ user }: { user: UserDetail }) {
         )}
       </Section>
 
-      {/* 한 줄 소개 */}
-      <Section label="한 줄 소개">
-        {p?.bio_message ? (
-          <div className="bg-surface rounded-[18px] px-4 py-3.5 text-[13.5px] border border-border leading-relaxed">
-            "{p.bio_message}"
-          </div>
-        ) : (
-          <EmptyCard />
-        )}
-      </Section>
-
-      {/* 관심사 키워드 */}
+      {/* 관심사 키워드 (한 개 필수) */}
       <Section label="관심사 키워드">
         <KeywordsCard keywords={p?.keywords} myTags={p?.my_tags} />
       </Section>
 
-      {/* 생활 습관 */}
+      {/* 생활 습관 — 음주(필수)+종류 / 흡연(필수)+종류 / 타투(선택) */}
       <Section label="생활 습관">
         <HabitsCard profile={p} />
-      </Section>
-
-      {/* 내 스타일 */}
-      <Section label="내 스타일">
-        <StyleCard profile={p} job={user.job} />
       </Section>
 
       {/* MBTI */}
@@ -189,28 +173,19 @@ function ProfileBody({ user }: { user: UserDetail }) {
         )}
       </Section>
 
-      {/* 이상형 */}
-      <Section label="이상형">
-        <IdealCard profile={p} />
+      {/* 나에 대해 — 일상유형 / 종교 / 이쪽지인 / 커밍아웃정보 (모두 선택) */}
+      <Section label="나에 대해">
+        <AboutMeCard profile={p} />
       </Section>
 
-      {/* 기본 정보 (어드민) */}
-      <Section label="기본 정보">
-        <div className="bg-surface rounded-[18px] border border-border px-4 py-2">
-          <MetaRow label="UUID" value={user.uuid} mono />
-          <MetaRow label="로그인 ID" value={user.login_id} />
-          <MetaRow label="지역" value={user.area ?? '-'} />
-          <MetaRow
-            label="본인 인증"
-            value={
-              user.identity_verified_at
-                ? formatDate(user.identity_verified_at)
-                : '미인증'
-            }
-          />
-          <MetaRow label="가입일" value={formatDateTime(user.create_time)} />
-          <MetaRow label="상태" value={USER_STATUS_LABEL[user.status]} />
-        </div>
+      {/* 내 스타일 — 머리길이 / 체형 / 키 / 성향 / 패션 / 꾸미는스타일 (모두 선택) */}
+      <Section label="내 스타일">
+        <StyleCard profile={p} />
+      </Section>
+
+      {/* 내 이상형 — 머리길이 / 체형 / 키 / 성향 / 중요포인트 (모두 선택) */}
+      <Section label="내 이상형">
+        <IdealCard profile={p} />
       </Section>
     </div>
   )
@@ -375,36 +350,8 @@ function Hero({ user }: { user: UserDetail }) {
             <span className="font-bold">🧬 {user.profile.mbti}</span>
           )}
           <span>📍 {user.area ?? '-'}</span>
-          <span>💼 {user.job ?? '직업 미입력'}</span>
         </div>
       </div>
-    </div>
-  )
-}
-
-/* ===== 완성도 ===== */
-
-function CompletionBar({ value, hint }: { value: number; hint?: string }) {
-  return (
-    <div className="bg-surface rounded-[12px] px-4 py-3 border border-border">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[12px] font-bold text-text-sub">프로필 완성도</span>
-        <span
-          className="text-[17px] font-extrabold tracking-tight"
-          style={{ color: '#9686BF' }}
-        >
-          {value}%
-        </span>
-      </div>
-      <div className="h-[5px] rounded-[3px] bg-bg overflow-hidden">
-        <div
-          className="h-full rounded-[3px]"
-          style={{ width: `${value}%`, backgroundColor: '#9686BF' }}
-        />
-      </div>
-      {hint && (
-        <div className="text-[11px] text-text-soft mt-1.5">{hint}</div>
-      )}
     </div>
   )
 }
@@ -502,7 +449,7 @@ function HabitsCard({ profile }: { profile?: UserProfile }) {
         <div className="flex-1">
           <div className="text-[11px] font-bold text-text-soft">타투</div>
           <div className="text-[13.5px] font-extrabold mt-0.5">
-            {profile.tattoo ?? '-'}
+            {profile.tattoo || '미입력'}
           </div>
         </div>
       </div>
@@ -556,60 +503,30 @@ function HabitBlock({
   )
 }
 
+/* ===== 나에 대해 ===== */
+
+function AboutMeCard({ profile }: { profile?: UserProfile }) {
+  return (
+    <div className="bg-surface rounded-[18px] border border-border px-4 py-2">
+      <MetaRow icon="🏠" label="일상 유형" value={profile?.daily_type || '미입력'} />
+      <MetaRow icon="🙏" label="종교" value={profile?.religion || '미입력'} />
+      <MetaRow icon="👥" label="이쪽 지인" value={profile?.friends_around || '미입력'} />
+      <MetaRow icon="🌈" label="커밍아웃 정보" value={profile?.coming_out || '미입력'} last />
+    </div>
+  )
+}
+
 /* ===== 내 스타일 ===== */
 
-function StyleCard({
-  profile,
-  job,
-}: {
-  profile?: UserProfile
-  job?: string | null
-}) {
-  if (!profile) return <EmptyCard />
+function StyleCard({ profile }: { profile?: UserProfile }) {
   return (
-    <div className="bg-surface rounded-[18px] border border-border px-4 py-4">
-      {/* 외모 4종 */}
-      <div className="text-[11px] font-bold text-text-soft mb-2 tracking-wider">
-        외모
-      </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {profile.hair_style && <Chip label={`💇 ${profile.hair_style}`} />}
-        {profile.body_type && (
-          <Chip label={`👤 ${profile.body_type}`} tone="green" />
-        )}
-        {profile.height && (
-          <Chip label={`📏 ${profile.height}`} tone="amber" />
-        )}
-        {profile.vibe && <Chip label={`💬 ${profile.vibe}`} tone="purple" />}
-      </div>
-
-      {/* 추가 정보 */}
-      <div className="text-[11px] font-bold text-text-soft mb-1 tracking-wider">
-        추가 정보
-      </div>
-      <MetaRow icon="💼" label="직업" value={job ?? '-'} />
-      {profile.daily_type && (
-        <MetaRow icon="🏠" label="일상 유형" value={profile.daily_type} />
-      )}
-      {profile.religion && (
-        <MetaRow icon="🙏" label="종교" value={profile.religion} />
-      )}
-      {profile.friends_around && (
-        <MetaRow
-          icon="👥"
-          label="주변 친구"
-          value={profile.friends_around}
-        />
-      )}
-      {profile.coming_out && (
-        <MetaRow icon="🌈" label="커밍아웃" value={profile.coming_out} />
-      )}
-      {profile.fashion && (
-        <MetaRow icon="👗" label="패션" value={profile.fashion} />
-      )}
-      {profile.grooming && (
-        <MetaRow icon="💄" label="꾸미기" value={profile.grooming} last />
-      )}
+    <div className="bg-surface rounded-[18px] border border-border px-4 py-2">
+      <MetaRow icon="💇" label="머리 길이" value={profile?.hair_style || '미입력'} />
+      <MetaRow icon="👤" label="체형" value={profile?.body_type || '미입력'} />
+      <MetaRow icon="📏" label="키" value={profile?.height || '미입력'} />
+      <MetaRow icon="💬" label="성향" value={profile?.vibe || '미입력'} />
+      <MetaRow icon="👗" label="패션 스타일" value={profile?.fashion || '미입력'} />
+      <MetaRow icon="💄" label="꾸미는 스타일" value={profile?.grooming || '미입력'} last />
     </div>
   )
 }
@@ -674,64 +591,32 @@ function MbtiCard({
   )
 }
 
-/* ===== 이상형 ===== */
+/* ===== 내 이상형 ===== */
 
 function IdealCard({ profile }: { profile?: UserProfile }) {
-  const hasAny =
-    profile != null &&
-    ((profile.important_points?.length ?? 0) > 0 ||
-      !!profile.ideal_hair ||
-      !!profile.ideal_body ||
-      !!profile.ideal_height ||
-      !!profile.ideal_vibe ||
-      !!profile.match_purpose ||
-      !!profile.important_factor)
-  if (!profile || !hasAny) return <EmptyCard />
   return (
-    <div className="bg-surface rounded-[18px] border border-border px-4 py-4">
-      {profile.important_points && profile.important_points.length > 0 && (
-        <>
-          <div className="text-[11px] font-bold text-text-soft mb-2 tracking-wider">
-            가장 중요한 포인트
-          </div>
-          <div className="flex flex-wrap gap-1.5 mb-3.5">
+    <div className="bg-surface rounded-[18px] border border-border px-4 py-4 space-y-3">
+      <div>
+        <div className="text-[11px] font-bold text-text-soft mb-2 tracking-wider">
+          중요 포인트
+        </div>
+        {profile?.important_points && profile.important_points.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
             {profile.important_points.map((p) => (
               <Chip key={p} label={p} tone="purple" />
             ))}
           </div>
-        </>
-      )}
-      <div className="text-[11px] font-bold text-text-soft mb-1 tracking-wider">
-        이상형 스타일
+        ) : (
+          <div className="text-[12.5px] text-text-soft">미입력</div>
+        )}
       </div>
-      {profile.ideal_hair && (
-        <MetaRow icon="💇" label="머리 길이" value={profile.ideal_hair} />
-      )}
-      {profile.ideal_body && (
-        <MetaRow icon="👤" label="체형" value={profile.ideal_body} />
-      )}
-      {profile.ideal_height && (
-        <MetaRow icon="📏" label="키" value={profile.ideal_height} />
-      )}
-      {profile.ideal_vibe && (
-        <MetaRow icon="💬" label="성향" value={profile.ideal_vibe} last />
-      )}
-      {profile.match_purpose && (
-        <MetaRow
-          icon="💞"
-          label="매칭 목적"
-          value={MATCH_PURPOSE_LABEL[profile.match_purpose]}
-          last
-        />
-      )}
-      {profile.important_factor && (
-        <MetaRow
-          icon="🌱"
-          label="중요 가치"
-          value={profile.important_factor}
-          last
-        />
-      )}
+
+      <div className="border-t border-border pt-2">
+        <MetaRow icon="💇" label="머리 길이" value={profile?.ideal_hair || '미입력'} />
+        <MetaRow icon="👤" label="체형" value={profile?.ideal_body || '미입력'} />
+        <MetaRow icon="📏" label="키" value={profile?.ideal_height || '미입력'} />
+        <MetaRow icon="💬" label="성향" value={profile?.ideal_vibe || '미입력'} last />
+      </div>
     </div>
   )
 }
@@ -773,7 +658,7 @@ function Section({
 /** 유저가 해당 항목을 작성하지 않았을 때 표시되는 빈 카드 — 항목(카테고리) 자체는 항상 노출. */
 function EmptyCard({ text = '미입력' }: { text?: string }) {
   return (
-    <div className="bg-surface rounded-[18px] px-4 py-4 border border-border border-dashed text-[12.5px] text-text-soft text-center">
+    <div className="bg-surface rounded-[18px] px-4 py-4 border border-border text-[12.5px] text-text-soft text-center">
       {text}
     </div>
   )
@@ -857,12 +742,12 @@ function MetaRow({
 /* ===== helpers ===== */
 
 function interestEmoji(t: InterestTarget): string {
-  if (t === 'ACQUAINTANCE') return '👫'
-  if (t === 'LOVER') return '💕'
+  if (t === 'FRIEND') return '👫'
+  if (t === 'LOVE') return '💕'
   return '💑'
 }
 function interestLabel(t: InterestTarget): string {
-  if (t === 'ACQUAINTANCE') return '지인 — 새로운 친구를 만나고 싶어요'
-  if (t === 'LOVER') return '애인 — 사랑을 찾고 싶어요'
+  if (t === 'FRIEND') return '지인 — 새로운 친구를 만나고 싶어요'
+  if (t === 'LOVE') return '애인 — 사랑을 찾고 싶어요'
   return '모두 — 친구도 연인도 OK!'
 }

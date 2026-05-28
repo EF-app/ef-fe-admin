@@ -44,7 +44,7 @@ export default function SuspensionLogsPage() {
 
   return (
     <>
-      <Topbar title="제재 로그" subtitle="유저 제재 이력 — 행 클릭 시 상세 페이지" />
+      <Topbar title="제재 관리" subtitle="유저 제재 이력 — 행 클릭 시 상세 페이지" />
 
       <div className="card mb-4">
         <div className="flex items-center gap-3 flex-wrap">
@@ -104,7 +104,12 @@ export default function SuspensionLogsPage() {
                   className="cursor-pointer"
                   onClick={() => navigate(`/suspensions/${s.id}`)}
                 >
-                  <td className="font-extrabold">{s.user_nickname ?? '-'}</td>
+                  <td>
+                    <div className="font-extrabold">{s.user_nickname ?? '-'}</div>
+                    <div className="text-[10.5px] text-text-soft mt-0.5">
+                      #{s.user_id} · @{s.user_login_id ?? '-'}
+                    </div>
+                  </td>
                   <td>
                     <SuspensionTypeBadge type={s.suspension_type} />
                   </td>
@@ -116,10 +121,12 @@ export default function SuspensionLogsPage() {
                     {s.ends_at ? formatDateTime(s.ends_at) : '영구'}
                   </td>
                   <td>
-                    {s.is_lifted ? (
-                      <Badge tone="normal">해제됨</Badge>
-                    ) : (
+                    {!s.is_lifted ? (
                       <Badge tone="warn">진행 중</Badge>
+                    ) : s.lifted_by_admin_id == null ? (
+                      <Badge tone="neutral">자동 만료</Badge>
+                    ) : (
+                      <Badge tone="normal">수동 해제</Badge>
                     )}
                   </td>
                   <td className="text-text-sub">{s.created_by_admin_name ?? '-'}</td>

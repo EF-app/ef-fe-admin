@@ -21,11 +21,7 @@ export const ADMIN_ENDPOINTS = {
   USER_SUSPENSIONS: (uuid: string | number) => `/api/admin/users/${uuid}/suspensions`,
 
   // 신고
-  REPORTS: '/api/admin/reports',
-  REPORTS_GROUPED: '/api/admin/reports/grouped',
-  REPORT_DETAIL: (id: number) => `/api/admin/reports/${id}`,
-  REPORT_PROCESS: (id: number) => `/api/admin/reports/${id}/process`,
-  REPORT_DISMISS: (id: number) => `/api/admin/reports/${id}/dismiss`,
+  // 신고 — BE AdminReportController (/v1/admin/reports). reportsBeApi 가 path 직접 보유.
 
   // 결제 & 환불
   PAYMENTS: '/api/admin/payments',
@@ -65,10 +61,13 @@ export const ADMIN_ENDPOINTS = {
   AUDIT_LOGS: '/api/admin/audit-logs',
   AUDIT_LOG_DETAIL: (id: number) => `/api/admin/audit-logs/${id}`,
 
-  // 제재 로그
-  SUSPENSION_LOGS: '/api/admin/suspension-logs',
-  SUSPENSION_LOG_DETAIL: (id: number) => `/api/admin/suspension-logs/${id}`,
-  SUSPENSION_LOG_LIFT: (id: number) => `/api/admin/suspension-logs/${id}/lift`,
+  // 제재 (BE AdminSuspensionController — /v1/admin/suspensions)
+  SUSPENSION_LOGS: '/v1/admin/suspensions',
+  SUSPENSION_LOG_DETAIL: (id: number) => `/v1/admin/suspensions/${id}`,
+  SUSPENSION_LOG_LIFT: (id: number) => `/v1/admin/suspensions/${id}/lift`,
+  SUSPENSION_LOG_LIFT_ALL_FOR_USER: (userId: number) =>
+    `/v1/admin/users/${userId}/suspensions/lift-all`,
+  SUSPENSION_LOG_CREATE: '/v1/admin/suspensions',
 
   // 포스트잇
   POST_ITS: '/api/admin/post-its',

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Heart,
@@ -15,27 +15,20 @@ import {
   useBalGameBeDetail,
   useBalGameCommentsBe,
   useHideBalCommentMutation,
-  useSuspendUserMutation,
   formatDateTime,
   formatNumber,
-  validators,
-  calcSuspensionEndsAt,
-  SUSPENSION_TYPE,
-  SUSPENSION_TYPE_LABEL,
-  TEMPORARY_DURATION_OPTIONS,
   BAL_BE_CATEGORIES,
 } from '@ef-fe-admin/shared'
 import type {
   BalCommentBe,
   BalCommentReplyBe,
   CommentAvatarColor,
-  SuspensionType,
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import EmptyState from '../../components/ui/EmptyState'
-import Modal from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SuspendInlineModal from '../../components/suspension/SuspendInlineModal'
 
 const AV_COLOR_MAP: Record<CommentAvatarColor, { bg: string; color: string }> = {
   purple: { bg: 'rgba(150,134,191,0.18)', color: '#9686BF' },
@@ -59,10 +52,24 @@ export default function BalGameCommentsPage() {
   const { data: comments, isLoading } = useBalGameCommentsBe(gameId)
 
   const [suspendTarget, setSuspendTarget] = useState<{
-    userUuid: string
+    userId: number
     nickname: string
     contextPrefill: string
   } | null>(null)
+
+  // 신고 목록 등에서 ?focus={commentId} 로 진입 시 해당 댓글로 자동 스크롤 + 하이라이트.
+  // 답글 PK 도 같은 테이블이라 본 댓글/답글 모두 잡힘. 댓글 fetch 완료 후 DOM 마운트 시점에 동작.
+  const [searchParams] = useSearchParams()
+  const focusCommentId = searchParams.get('focus')
+  useEffect(() => {
+    if (!focusCommentId || isLoading || !comments?.length) return
+    const el = document.getElementById(`comment-${focusCommentId}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('highlight-pulse')
+    const t = setTimeout(() => el.classList.remove('highlight-pulse'), 2000)
+    return () => clearTimeout(t)
+  }, [focusCommentId, isLoading, comments])
 
   return (
     <>
@@ -150,13 +157,9 @@ export default function BalGameCommentsPage() {
               <CommentRow
                 key={c.id}
                 comment={c}
-                onSuspend={() =>
-                  setSuspendTarget({
-                    userUuid: c.authorUserUuid,
-                    nickname: c.authorRealNickname,
-                    contextPrefill: `밸런스 댓글 #${c.id} — `,
-                  })
-                }
+                gameOptionA={game?.optionA ?? ''}
+                gameOptionB={game?.optionB ?? ''}
+                onSuspend={(target) => setSuspendTarget(target)}
               />
             ))}
           </div>
@@ -165,7 +168,9 @@ export default function BalGameCommentsPage() {
 
       {suspendTarget && (
         <SuspendInlineModal
-          target={suspendTarget}
+          userId={suspendTarget.userId}
+          userNickname={suspendTarget.nickname}
+          contextPrefill={suspendTarget.contextPrefill}
           onClose={() => setSuspendTarget(null)}
         />
       )}
@@ -232,16 +237,49 @@ function MiniOption({
 }
 
 /* ===== 댓글 한 줄 (메인 + 답글) ===== */
+interface SuspendTarget {
+  userId: number
+  nickname: string
+  contextPrefill: string
+}
+
+function buildBalCommentPrefill(
+  item: BalCommentBe | BalCommentReplyBe,
+  optionA: string,
+  optionB: string,
+  isReply: boolean,
+): string {
+  const body = item.text ?? ''
+  const trimmed = body.length > 200 ? `${body.slice(0, 200)}…` : body
+  const label = isReply ? '밸런스 답글' : '밸런스 댓글'
+  return `${label} #${item.id} (${optionA} vs ${optionB})\n본문: "${trimmed}"\n사유: `
+}
+
 function CommentRow({
   comment,
+  gameOptionA,
+  gameOptionB,
   onSuspend,
 }: {
   comment: BalCommentBe
-  onSuspend: () => void
+  gameOptionA: string
+  gameOptionB: string
+  onSuspend: (target: SuspendTarget) => void
 }) {
   return (
     <div className="py-3.5">
-      <CommentBody item={comment} gameId={comment.gameId} isReply={false} onSuspend={onSuspend} />
+      <CommentBody
+        item={comment}
+        gameId={comment.gameId}
+        isReply={false}
+        onSuspend={() =>
+          onSuspend({
+            userId: comment.authorUserId,
+            nickname: comment.authorRealNickname,
+            contextPrefill: buildBalCommentPrefill(comment, gameOptionA, gameOptionB, false),
+          })
+        }
+      />
       {comment.replies.length > 0 && (
         <div
           className="ml-[42px] mt-3 pl-3"
@@ -253,10 +291,13 @@ function CommentRow({
               item={r}
               gameId={comment.gameId}
               isReply={true}
-              onSuspend={() => {
-                /* 답글도 동일 부모 흐름 — 부모에서 처리해도 됨, 여기선 inline 호출 */
-                ;(window as unknown as { __replySuspend?: () => void }).__replySuspend?.()
-              }}
+              onSuspend={() =>
+                onSuspend({
+                  userId: r.authorUserId,
+                  nickname: r.authorRealNickname,
+                  contextPrefill: buildBalCommentPrefill(r, gameOptionA, gameOptionB, true),
+                })
+              }
               replyParentId={comment.id}
             />
           ))}
@@ -297,7 +338,10 @@ function CommentBody({
   }
 
   return (
-    <div className="flex items-start gap-2.5">
+    <div
+      id={`comment-${item.id}`}
+      className="flex items-start gap-2.5 rounded-md scroll-mt-20 transition-colors"
+    >
       <div
         className="rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
         style={{
@@ -436,95 +480,3 @@ function CommentBody({
   )
 }
 
-/* ===== 인라인 제재 모달 ===== */
-function SuspendInlineModal({
-  target,
-  onClose,
-}: {
-  target: { userUuid: string; nickname: string; contextPrefill: string }
-  onClose: () => void
-}) {
-  const [type, setType] = useState<SuspensionType>('WARNING')
-  const [durationDays, setDurationDays] = useState(7)
-  const [reason, setReason] = useState(target.contextPrefill)
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useSuspendUserMutation({
-    onSuccess: onClose,
-    onError: (e) => setError(e.message),
-  })
-
-  const handleSubmit = () => {
-    setError(null)
-    const check = validators.suspensionReason(reason)
-    if (!check.valid) return setError(check.message ?? '')
-    mutation.mutate({
-      uuid: target.userUuid,
-      payload: {
-        suspension_type: type,
-        reason,
-        ends_at: calcSuspensionEndsAt(type, type === 'TEMPORARY' ? durationDays : undefined),
-      },
-    })
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`작성자 제재 — ${target.nickname}`} maxWidth={520}>
-      <div className="space-y-3">
-        <div>
-          <label className="form-label">제재 유형</label>
-          <div className="flex gap-2 flex-wrap">
-            {(Object.keys(SUSPENSION_TYPE) as SuspensionType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`chip ${type === t ? 'active' : ''}`}
-                onClick={() => setType(t)}
-              >
-                {SUSPENSION_TYPE_LABEL[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {type === 'TEMPORARY' && (
-          <div>
-            <label className="form-label">기간</label>
-            <div className="flex gap-2 flex-wrap">
-              {TEMPORARY_DURATION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  type="button"
-                  className={`chip ${durationDays === opt.days ? 'active' : ''}`}
-                  onClick={() => setDurationDays(opt.days)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div>
-          <label className="form-label">사유</label>
-          <textarea
-            className="form-textarea"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
-        {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
-            취소
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
-            onClick={handleSubmit}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? '처리 중...' : '제재 발동'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}

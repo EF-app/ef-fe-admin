@@ -3,11 +3,14 @@
  * 백엔드 응답의 snake_case 값을 그대로 사용
  */
 
+// BE UserStatus enum 미러 (com.nokcha.efbe.domain.user.entity.UserStatus).
+// 경고(WARNING)는 status 미반영 — suspension_log 누적만으로 추적.
 export const USER_STATUS = {
   ACTIVE: 'ACTIVE',
-  WARNING: 'WARNING',
-  TEMP_SUSPENDED: 'TEMP_SUSPENDED',
-  PERMANENTLY_SUSPENDED: 'PERMANENTLY_SUSPENDED',
+  TEMPORARY: 'TEMPORARY',
+  PERMANENT: 'PERMANENT',
+  WITHDRAWING: 'WITHDRAWING',
+  WITHDRAWN: 'WITHDRAWN',
 } as const;
 export type UserStatus = (typeof USER_STATUS)[keyof typeof USER_STATUS];
 
@@ -111,10 +114,11 @@ export const PROFILE_STATUS = {
 } as const;
 export type ProfileStatus = (typeof PROFILE_STATUS)[keyof typeof PROFILE_STATUS];
 
+// BE Purpose enum 미러 (com.nokcha.efbe.domain.profile.entity.Purpose)
 export const MATCH_PURPOSE = {
+  LOVE: 'LOVE',
   FRIEND: 'FRIEND',
-  LOVER: 'LOVER',
-  BOTH: 'BOTH',
+  MIXED: 'MIXED',
 } as const;
 export type MatchPurpose = (typeof MATCH_PURPOSE)[keyof typeof MATCH_PURPOSE];
 

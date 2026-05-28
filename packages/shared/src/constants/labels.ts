@@ -41,9 +41,10 @@ import type {
 
 export const USER_STATUS_LABEL: Record<UserStatus, string> = {
   ACTIVE: '정상',
-  WARNING: '경고',
-  TEMP_SUSPENDED: '일시정지',
-  PERMANENTLY_SUSPENDED: '영구정지',
+  TEMPORARY: '일시정지',
+  PERMANENT: '영구정지',
+  WITHDRAWING: '탈퇴 신청',
+  WITHDRAWN: '탈퇴 완료',
 };
 
 export const SUSPENSION_TYPE_LABEL: Record<SuspensionType, string> = {
@@ -120,9 +121,9 @@ export const BAL_APPLY_STATUS_LABEL: Record<BalApplyStatus, string> = {
 };
 
 export const MATCH_PURPOSE_LABEL: Record<MatchPurpose, string> = {
+  LOVE: '연인',
   FRIEND: '친구',
-  LOVER: '연인',
-  BOTH: '둘 다',
+  MIXED: '둘 다',
 };
 
 export const DRINKING_LABEL: Record<DrinkingLevel, string> = {

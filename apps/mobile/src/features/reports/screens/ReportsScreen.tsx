@@ -45,14 +45,12 @@ function resolveGroupOutcome(g: ReportGroup):
   | { kind: 'dismissed' }
   | { kind: 'processed' } {
   if (g.pending_count > 0) return { kind: 'pending', count: g.pending_count };
+  // 평탄화 — 같은 그룹의 모든 PROCESSED 신고에 동일 suspension_id 부여됨.
   const processed = g.reports.find(
-    (r) =>
-      r.status === 'PROCESSED' &&
-      (r.suspension_id != null || r.effective_suspension_id != null)
+    (r) => r.status === 'PROCESSED' && r.suspension_id != null,
   );
   if (processed) {
-    const sid = processed.suspension_id ?? processed.effective_suspension_id!;
-    return { kind: 'suspended', suspensionId: sid };
+    return { kind: 'suspended', suspensionId: processed.suspension_id! };
   }
   const anyDismissed = g.reports.some((r) => r.status === 'DISMISSED');
   if (anyDismissed && !g.reports.some((r) => r.status === 'PROCESSED'))

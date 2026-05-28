@@ -36,7 +36,7 @@ export const mockAuditLogs: AuditLog[] = [
     target_type: 'User',
     target_id: 103,
     before_json: { status: 'ACTIVE' },
-    after_json: { status: 'TEMP_SUSPENDED' },
+    after_json: { status: 'TEMPORARY' },
     ip_address: '127.0.0.1',
     user_agent: 'Mozilla/5.0',
     create_time: '2026-04-15T00:00:00.000Z',

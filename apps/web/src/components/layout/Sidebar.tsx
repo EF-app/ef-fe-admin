@@ -24,7 +24,7 @@ import {
   AlertOctagon,
   Bell,
 } from 'lucide-react'
-import { useDashboardAlerts } from '@ef-fe-admin/shared'
+import { useDashboardAlerts, useReportsGrouped } from '@ef-fe-admin/shared'
 
 type BadgeKey =
   | 'pending_reports'
@@ -45,12 +45,6 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
     items: [
       { to: '/dashboard', label: '대시보드', icon: <Home size={16} /> },
       { to: '/users', label: '유저관리', icon: <Users size={16} /> },
-      {
-        to: '/profile-reviews',
-        label: '프로필 관리',
-        icon: <UserCheck size={16} />,
-        badgeKey: 'pending_profile_reviews',
-      },
       { to: '/notices', label: '공지사항', icon: <Megaphone size={16} /> },
       { to: '/pushes', label: '푸시 발송', icon: <Bell size={16} /> },
     ],
@@ -65,7 +59,7 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
         icon: <AlertTriangle size={16} />,
         badgeKey: 'pending_reports',
       },
-      { to: '/suspensions', label: '제재 로그', icon: <ShieldOff size={16} /> },
+      { to: '/suspensions', label: '제재 관리', icon: <ShieldOff size={16} /> },
       { to: '/feedback', label: '피드백', icon: <Bug size={16} /> },
     ],
   },
@@ -121,6 +115,17 @@ export default function Sidebar() {
   const { data: alerts } = useDashboardAlerts({
     refetchInterval: 60_000,
   })
+  // 신고 그룹 개수 — (target_type, target_id) 단위로 묶인 PENDING 그룹 수. size=1 로 totalElements 만 사용.
+  const { data: pendingReportGroups } = useReportsGrouped(
+    { status: 'PENDING', page: 0, size: 1 },
+    { refetchInterval: 60_000 },
+  )
+
+  // badgeKey 별 카운트 해석 — 신고는 그룹 개수, 그 외는 dashboard alerts.
+  const resolveCount = (key: NonNullable<NavItemDef['badgeKey']>): number | undefined => {
+    if (key === 'pending_reports') return pendingReportGroups?.totalElements
+    return alerts?.[key]
+  }
 
   return (
     <aside className="bg-surface border-r border-border sticky top-0 h-screen overflow-y-auto w-[240px] p-7 px-4">
@@ -140,7 +145,7 @@ export default function Sidebar() {
             {section.title}
           </div>
           {section.items.map((item) => {
-            const count = item.badgeKey ? alerts?.[item.badgeKey] : undefined
+            const count = item.badgeKey ? resolveCount(item.badgeKey) : undefined
             return (
               <NavLink
                 key={item.to}

@@ -21,9 +21,10 @@ import EmptyState from '../../../components/ui/EmptyState';
 
 const statusVariant: Record<UserStatus, 'active' | 'warn' | 'danger' | 'neutral'> = {
   ACTIVE: 'active',
-  WARNING: 'warn',
-  TEMP_SUSPENDED: 'danger',
-  PERMANENTLY_SUSPENDED: 'danger',
+  TEMPORARY: 'danger',
+  PERMANENT: 'danger',
+  WITHDRAWING: 'neutral',
+  WITHDRAWN: 'neutral',
 };
 
 export default function UsersScreen() {

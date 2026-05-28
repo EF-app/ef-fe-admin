@@ -72,8 +72,20 @@ export default function SuspensionLogsScreen() {
                 <Text className="text-[14px] font-extrabold text-text">
                   {item.user_nickname ?? '-'}
                 </Text>
-                <Badge variant={item.is_lifted ? 'active' : 'warn'}>
-                  {item.is_lifted ? '해제됨' : '진행 중'}
+                <Badge
+                  variant={
+                    !item.is_lifted
+                      ? 'warn'
+                      : item.lifted_by_admin_id == null
+                        ? 'neutral'
+                        : 'active'
+                  }
+                >
+                  {!item.is_lifted
+                    ? '진행 중'
+                    : item.lifted_by_admin_id == null
+                      ? '자동 만료'
+                      : '수동 해제'}
                 </Badge>
               </View>
               <View className="flex-row items-center gap-2 mb-1">
@@ -145,7 +157,16 @@ function SuspensionDetailSheet({
         <Row label="시작" value={formatDateTime(log.starts_at)} />
         <Row label="종료" value={log.ends_at ? formatDateTime(log.ends_at) : '영구'} />
         <Row label="처리 관리자" value={log.created_by_admin_name ?? '-'} />
-        <Row label="상태" value={log.is_lifted ? '해제됨' : '진행 중'} />
+        <Row
+          label="상태"
+          value={
+            !log.is_lifted
+              ? '진행 중'
+              : log.lifted_by_admin_id == null
+                ? '자동 만료'
+                : '수동 해제'
+          }
+        />
       </View>
 
       <Text className="text-[12px] font-bold text-text-sub mb-1.5">제재 사유</Text>
@@ -155,12 +176,21 @@ function SuspensionDetailSheet({
 
       {log.is_lifted ? (
         <View className="bg-bg rounded-lg p-3 gap-1">
-          <Text className="text-[11px] font-extrabold text-text-sub">해제 정보</Text>
-          <Text className="text-[11.5px] text-text-sub">
-            {log.lifted_at ? formatDateTime(log.lifted_at) : '-'} · {log.lifted_by_admin_name ?? '-'}
+          <Text className="text-[11px] font-extrabold text-text-sub">
+            {log.lifted_by_admin_id == null ? '자동 만료 정보' : '수동 해제 정보'}
           </Text>
-          {log.lifted_reason && (
-            <Text className="text-[11.5px] text-text-sub">사유: {log.lifted_reason}</Text>
+          <Text className="text-[11.5px] text-text-sub">
+            {log.lifted_at ? formatDateTime(log.lifted_at) : '-'}
+            {log.lifted_by_admin_id != null && ` · ${log.lifted_by_admin_name ?? '-'}`}
+          </Text>
+          {log.lifted_by_admin_id == null ? (
+            <Text className="text-[11.5px] text-text-soft">
+              ends_at 도달로 배치가 자동 해제했습니다.
+            </Text>
+          ) : (
+            log.lifted_reason && (
+              <Text className="text-[11.5px] text-text-sub">사유: {log.lifted_reason}</Text>
+            )
           )}
         </View>
       ) : (

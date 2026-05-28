@@ -1,9 +1,9 @@
 /**
- * 백엔드 어드민 차단 내역 API 클라이언트 (단수 — /v1/admin/block).
+ * 백엔드 어드민 차단 내역 API 클라이언트 (복수 — /v1/admin/blocks).
  * - RspTemplate<T> = { code, message, data } 언랩.
  * - Spring Page<T> 를 PageResponse<BlockEntry> 로 매핑.
  *
- * BE 컨트롤러: AdminBlockController (GET /v1/admin/block)
+ * BE 컨트롤러: AdminBlockController (GET /v1/admin/blocks)
  *   - keyword(차단자/피차단자 닉네임·UUID LIKE), page, size
  *
  * BE AdminBlockRspDto 의 필드명이 FE BlockEntry 와 1:1 이라 별도 필드 매핑 불필요.
@@ -27,7 +27,7 @@ interface SpringPage<T> {
   last: boolean;
 }
 
-const BASE = '/v1/admin/block';
+const BASE = '/v1/admin/blocks';
 
 export const blockBeApi = {
   getBlocks: async (params?: BlockListParams): Promise<PageResponse<BlockEntry>> => {

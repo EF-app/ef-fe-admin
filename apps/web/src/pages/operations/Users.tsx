@@ -5,13 +5,15 @@ import {
   useUsers,
   formatDateTime,
   USER_STATUS,
+  PROFILE_STATUS,
+  PROFILE_STATUS_LABEL,
 } from '@ef-fe-admin/shared'
-import type { UserStatus } from '@ef-fe-admin/shared'
+import type { UserStatus, ProfileStatus } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import FilterChips from '../../components/ui/FilterChips'
 import Pagination from '../../components/ui/Pagination'
 import EmptyState from '../../components/ui/EmptyState'
-import { UserStatusBadge } from '../../components/ui/Badge'
+import { UserStatusBadge, Badge } from '../../components/ui/Badge'
 
 /**
  * 목록 표시용 — 32자리 UUID 를 앞 8-4 그룹까지만 보여주고 나머지는 생략.
@@ -27,15 +29,31 @@ function shortUuid(raw: string): string {
 const STATUS_OPTIONS: { value: UserStatus | undefined; label: string }[] = [
   { value: undefined, label: '전체' },
   { value: USER_STATUS.ACTIVE, label: '정상' },
-  { value: USER_STATUS.WARNING, label: '경고' },
-  { value: USER_STATUS.TEMP_SUSPENDED, label: '일시정지' },
-  { value: USER_STATUS.PERMANENTLY_SUSPENDED, label: '영구정지' },
+  { value: USER_STATUS.TEMPORARY, label: '일시정지' },
+  { value: USER_STATUS.PERMANENT, label: '영구정지' },
+  { value: USER_STATUS.WITHDRAWING, label: '탈퇴 신청' },
+  { value: USER_STATUS.WITHDRAWN, label: '탈퇴 완료' },
 ]
+
+const PROFILE_STATUS_OPTIONS: { value: ProfileStatus | undefined; label: string }[] = [
+  { value: undefined, label: '전체' },
+  { value: PROFILE_STATUS.PENDING, label: PROFILE_STATUS_LABEL.PENDING },
+  { value: PROFILE_STATUS.APPROVED, label: PROFILE_STATUS_LABEL.APPROVED },
+  { value: PROFILE_STATUS.REJECTED, label: PROFILE_STATUS_LABEL.REJECTED },
+]
+
+function ProfileStatusBadge({ status }: { status?: ProfileStatus }) {
+  if (!status) return <span className="text-text-soft text-[11px]">-</span>
+  const tone: 'warn' | 'normal' | 'danger' =
+    status === 'PENDING' ? 'warn' : status === 'APPROVED' ? 'normal' : 'danger'
+  return <Badge tone={tone}>{PROFILE_STATUS_LABEL[status]}</Badge>
+}
 
 export default function UsersPage() {
   const navigate = useNavigate()
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState<UserStatus | undefined>(undefined)
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus | undefined>(undefined)
   const [page, setPage] = useState(0)
 
   const { data, isLoading } = useUsers({
@@ -44,6 +62,12 @@ export default function UsersPage() {
     page,
     size: 15,
   })
+
+  // 클라이언트 측 profile_status 필터 (BE 가 status 만 지원하는 동안 임시).
+  // 향후 BE 가 profileStatus 파라미터 받기 시작하면 useUsers 호출로 옮길 수 있음.
+  const filteredContent = profileStatus
+    ? data?.content.filter((u) => u.profile_status === profileStatus)
+    : data?.content
 
   return (
     <>
@@ -71,16 +95,24 @@ export default function UsersPage() {
             }}
             options={STATUS_OPTIONS}
           />
+          <FilterChips
+            value={profileStatus}
+            onChange={(v) => {
+              setProfileStatus(v)
+              setPage(0)
+            }}
+            options={PROFILE_STATUS_OPTIONS}
+          />
         </div>
       </div>
 
       <div className="card p-0 overflow-x-auto">
         {isLoading ? (
           <div className="p-10 text-center text-text-soft text-[12px]">불러오는 중...</div>
-        ) : !data?.content?.length ? (
+        ) : !filteredContent?.length ? (
           <EmptyState title="유저가 없습니다." />
         ) : (
-          <table className="data-table min-w-[820px]">
+          <table className="data-table min-w-[880px]">
             <thead>
               <tr>
                 <th>닉네임</th>
@@ -91,10 +123,11 @@ export default function UsersPage() {
                 <th>가입</th>
                 <th>최근 접속</th>
                 <th>상태</th>
+                <th>프로필 심사</th>
               </tr>
             </thead>
             <tbody>
-              {data.content.map((u) => (
+              {filteredContent.map((u) => (
                 <tr
                   key={u.id}
                   className="cursor-pointer"
@@ -114,6 +147,9 @@ export default function UsersPage() {
                   <td className="text-text-sub">{formatDateTime(u.last_login_time)}</td>
                   <td>
                     <UserStatusBadge status={u.status} />
+                  </td>
+                  <td>
+                    <ProfileStatusBadge status={u.profile_status} />
                   </td>
                 </tr>
               ))}

@@ -3,7 +3,6 @@ export * from './endpoints';
 export { authApi } from './auth';
 export { dashboardApi } from './dashboard';
 export { usersApi } from './users';
-export { reportsApi } from './reports';
 export { reportsBeApi } from './reportsBe';
 export { paymentsApi } from './payments';
 export { profileReviewsApi } from './profileReviews';

@@ -1,12 +1,12 @@
 /**
- * 백엔드 어드민 피드백 API 클라이언트 (단수 — /v1/admin/feedback).
+ * 백엔드 어드민 피드백 API 클라이언트 (복수 — /v1/admin/feedbacks).
  * - RspTemplate<T> = { code, message, data } 언랩.
  * - BE 는 camelCase, 화면(Feedback 타입)은 레거시 snake_case → 이 모듈이 매핑.
  *
  * BE 컨트롤러: AdminFeedbackController
- *   - GET    /v1/admin/feedback        목록 (feedbackType/status/categoryCode/keyword)
- *   - GET    /v1/admin/feedback/{id}   단건 상세
- *   - PATCH  /v1/admin/feedback/{id}   처리 (status/adminReply/adminInternalMemo)
+ *   - GET    /v1/admin/feedbacks        목록 (feedbackType/status/categoryCode/keyword)
+ *   - GET    /v1/admin/feedbacks/{id}   단건 상세
+ *   - PATCH  /v1/admin/feedbacks/{id}   처리 (status/adminReply/adminInternalMemo)
  */
 import { getApiClient } from './client';
 import type { PageResponse } from '../types/common';
@@ -60,7 +60,7 @@ interface BeFeedback {
   updateTime: string;
 }
 
-const BASE = '/v1/admin/feedback';
+const BASE = '/v1/admin/feedbacks';
 
 function toFeedback(be: BeFeedback): Feedback {
   return {

@@ -38,7 +38,7 @@ export function Badge({ tone = 'neutral', children }: BadgeProps) {
 export function UserStatusBadge({ status }: { status: UserStatus }) {
   const tone: Tone =
     status === 'ACTIVE' ? 'normal' :
-    status === 'WARNING' ? 'warn' :
+    status === 'WITHDRAWING' || status === 'WITHDRAWN' ? 'neutral' :
     'danger'
   return <Badge tone={tone}>{USER_STATUS_LABEL[status]}</Badge>
 }

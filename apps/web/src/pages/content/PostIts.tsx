@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Search,
   EyeOff,
@@ -14,21 +14,16 @@ import {
   usePostItsBe,
   useHidePostItBeMutation,
   useRestorePostItBeMutation,
-  useSuspendUserMutation,
+  postItsBeApi,
   formatDateTime,
   formatNumber,
   POST_IT_CATEGORY,
   POST_IT_CATEGORY_LABEL,
   POST_IT_COLOR_HEX,
-  SUSPENSION_TYPE,
-  SUSPENSION_TYPE_LABEL,
-  calcSuspensionEndsAt,
-  TEMPORARY_DURATION_OPTIONS,
 } from '@ef-fe-admin/shared'
 import type {
   PostItBe,
   PostItCategory,
-  SuspensionType,
 } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import FilterChips from '../../components/ui/FilterChips'
@@ -37,6 +32,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import Modal from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SuspendInlineModal from '../../components/suspension/SuspendInlineModal'
 
 const CATEGORY_OPTIONS: { value: PostItCategory | undefined; label: string }[] = [
   { value: undefined, label: '전체' },
@@ -54,6 +50,7 @@ const VISIBILITY_OPTIONS: { value: 'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED'; lab
 ]
 
 export default function PostItsPage() {
+  const navigate = useNavigate()
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState<PostItCategory | undefined>(undefined)
   const [visibility, setVisibility] = useState<'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED'>(
@@ -73,6 +70,26 @@ export default function PostItsPage() {
     page,
     size: 10,
   })
+
+  // 신고 목록 등에서 ?focus={postItId} 로 진입 시 해당 포스트잇 상세 모달 자동 오픈.
+  // 목록 페이지 필터/페이지에 안 보여도 단건 detail 로 직접 가져옴.
+  const [searchParams] = useSearchParams()
+  const focusPostItId = searchParams.get('focus')
+  useEffect(() => {
+    if (!focusPostItId || selected) return
+    let cancelled = false
+    postItsBeApi
+      .detail(Number(focusPostItId))
+      .then((p) => {
+        if (!cancelled) setSelected(p)
+      })
+      .catch(() => {
+        // 미존재/삭제 등 — 조용히 무시 (목록은 일반대로 표시)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [focusPostItId, selected])
 
   return (
     <>
@@ -142,7 +159,11 @@ export default function PostItsPage() {
       {selected && (
         <PostItDetailModal
           post={selected}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null)
+            // ?focus= 로 진입한 경우 (예: 신고 목록 → 포스트잇 보기) 닫으면 이전 페이지로 복귀.
+            if (focusPostItId) navigate(-1)
+          }}
         />
       )}
     </>
@@ -528,15 +549,9 @@ function PostItDetailModal({
                 </div>
               )}
 
-              {/* 액션 버튼 — 익명 글도 작성자 제재 가능 */}
+              {/* 액션 버튼 — 익명 글도 작성자 제재 가능. 순서: 숨김 → 제재 */}
               {confirmMode === null && (
                 <div className="flex items-center justify-end gap-2 flex-wrap">
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setSuspendOpen(true)}
-                  >
-                    <Ban size={13} /> 작성자 제재
-                  </button>
                   {!post.hidden ? (
                     <button
                       className="btn btn-danger btn-sm"
@@ -552,6 +567,12 @@ function PostItDetailModal({
                       <Eye size={13} /> 숨김 해제
                     </button>
                   )}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setSuspendOpen(true)}
+                  >
+                    <Ban size={13} /> 작성자 제재
+                  </button>
                 </div>
               )}
             </>
@@ -560,12 +581,17 @@ function PostItDetailModal({
       </Modal>
 
       {suspendOpen && (
-        <SuspendAuthorModal
-          userUuid={post.userUuid}
-          nickname={post.userNickname}
+        <SuspendInlineModal
+          userId={post.userId}
+          userNickname={post.userNickname}
           isAnonymous={post.anonymous}
+          contextPrefill={`포스트잇 #${post.id} (${POST_IT_CATEGORY_LABEL[post.categoryCode as PostItCategory] ?? post.categoryCode})\n본문: "${
+            (post.content ?? '').length > 200
+              ? `${post.content.slice(0, 200)}…`
+              : post.content ?? ''
+          }"\n사유: `}
           onClose={() => setSuspendOpen(false)}
-          onDone={onClose}
+          onSuccess={onClose}
         />
       )}
 
@@ -605,132 +631,6 @@ function PostItDetailModal({
         />
       )}
     </>
-  )
-}
-
-/* ===== 작성자 제재 모달 ===== */
-function SuspendAuthorModal({
-  userUuid,
-  nickname,
-  isAnonymous,
-  onClose,
-  onDone,
-}: {
-  userUuid: string
-  nickname: string
-  isAnonymous: boolean
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [type, setType] = useState<SuspensionType>('WARNING')
-  const [durationDays, setDurationDays] = useState<number>(7)
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useSuspendUserMutation({
-    onSuccess: () => {
-      onClose()
-      onDone()
-    },
-    onError: (e) => setError(e.message),
-  })
-
-  const handleSubmit = () => {
-    setError(null)
-    if (!reason.trim()) {
-      setError('제재 사유를 입력해주세요.')
-      return
-    }
-    mutation.mutate({
-      uuid: userUuid,
-      payload: {
-        suspension_type: type,
-        reason,
-        ends_at: calcSuspensionEndsAt(
-          type,
-          type === 'TEMPORARY' ? durationDays : undefined
-        ),
-      },
-    })
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`작성자 제재 — ${nickname}${isAnonymous ? ' (익명 글 작성자)' : ''}`}
-      maxWidth={540}
-    >
-      <div className="space-y-3">
-        <div className="bg-surface-alt rounded-md p-3 text-[12.5px]">
-          <strong>{nickname}</strong> 에게 적용할 제재를 선택하세요.
-          {isAnonymous && (
-            <div className="text-warn text-[11.5px] font-bold mt-1">
-              ⚠️ 익명 글이지만 실제 작성자에게 제재가 적용됩니다.
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="form-label">제재 유형</label>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(SUSPENSION_TYPE) as SuspensionType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`chip ${type === t ? 'active' : ''}`}
-                onClick={() => setType(t)}
-              >
-                {SUSPENSION_TYPE_LABEL[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {type === 'TEMPORARY' && (
-          <div>
-            <label className="form-label">기간</label>
-            <div className="flex flex-wrap gap-2">
-              {TEMPORARY_DURATION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  type="button"
-                  className={`chip ${durationDays === opt.days ? 'active' : ''}`}
-                  onClick={() => setDurationDays(opt.days)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="form-label">사유 (유저에게 통보됨)</label>
-          <textarea
-            className="form-textarea"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="예) 카톡 ID 유도 / 스팸성 광고"
-          />
-        </div>
-
-        {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
-
-        <div className="flex justify-end gap-2">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
-            취소
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
-            disabled={mutation.isPending}
-            onClick={handleSubmit}
-          >
-            {mutation.isPending ? '처리 중...' : '제재 발동'}
-          </button>
-        </div>
-      </div>
-    </Modal>
   )
 }
 

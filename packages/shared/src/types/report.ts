@@ -1,4 +1,4 @@
-import type { ReportTargetType, ReportStatus, SuspensionType } from '../constants/enums';
+import type { ReportTargetType, ReportStatus } from '../constants/enums';
 
 /**
  * 다형성 신고 (DDL `report` 정합).
@@ -37,18 +37,15 @@ export interface Report {
   admin_processed_by_name?: string;
   admin_processed_at: string | null;
 
-  /** 이 신고로 이어진 제재 (대표 신고만 직접 보유) */
+  /** 이 신고로 이어진 제재 user_suspension.id. 같은 그룹의 모든 PROCESSED 신고에 동일 id (평탄화) */
   suspension_id: number | null;
-  /** cascade 신고에서도 화면 표시용으로 합성된 제재 id (자기 자신 = suspension_id) */
-  effective_suspension_id?: number | null;
-  /** 이 신고가 따라간 대표 신고 id (cascade 신고만 채워짐) */
-  parent_report_id?: number | null;
 
   /** 표시용 denormalized — BE enrich 필드 */
   target_preview?: string;
   target_user_id?: number;
   /** target user 의 외부 식별자 — admin FE 가 /users/{uuid} navigate 용 */
   target_user_uuid?: string | null;
+  target_user_login_id?: string;
   target_user_nickname?: string;
   /** BAL_COMMENT 일 때 부모 밸런스게임 id — admin FE 가 /balance/{id}/comments navigate 용 */
   bal_game_id?: number;
@@ -59,17 +56,13 @@ export interface Report {
   update_time: string;
 }
 
-export interface ReportListParams {
-  status?: ReportStatus;
-  target_type?: ReportTargetType;
-  page?: number;
-  size?: number;
-}
-
+/**
+ * 신고 처리 요청.
+ * 제재 부과는 별도 API (POST /v1/admin/suspensions) 로 먼저 처리 후, 받은 id 를 여기 전달.
+ * suspension_id 가 null/생략이면 "신고 내용 인정하지만 제재 미부과" 로 처리.
+ */
 export interface ProcessReportRequest {
-  suspension_type: SuspensionType;
-  reason: string;
-  ends_at?: string | null;
+  suspension_id?: number | null;
 }
 
 /**
@@ -89,13 +82,18 @@ export interface ReportGroup {
 
   target_user_id?: number;
   target_user_uuid?: string | null;
+  target_user_login_id?: string;
   target_user_nickname?: string;
   target_preview?: string;
 }
 
+export type ReportGroupSort = 'OLDEST' | 'MOST_REPORTED';
+
 export interface ReportGroupListParams {
   status?: ReportStatus;
   target_type?: ReportTargetType;
+  /** OLDEST (기본, 첫 신고 오래된 순) / MOST_REPORTED (신고 건수 많은 순, 동률이면 오래된 순) */
+  sort?: ReportGroupSort;
   page?: number;
   size?: number;
 }
