@@ -160,7 +160,7 @@ export const FEEDBACK_TYPE_LABEL: Record<FeedbackType, string> = {
 };
 
 export const FEEDBACK_STATUS_LABEL: Record<FeedbackStatus, string> = {
-  RECEIVED: '접수됨',
+  RECEIVED: '등록됨',
   IN_REVIEW: '검토 중',
   IN_PROGRESS: '처리 중',
   RESOLVED: '해결됨',
