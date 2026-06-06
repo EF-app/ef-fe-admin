@@ -32,11 +32,11 @@ export default function ReportDetailPage() {
   const [suspendOpen, setSuspendOpen] = useState(false)
 
   const processMutation = useProcessReportMutation({
-    onSuccess: () => navigate('/reports'),
+    onSuccess: () => (window.history.length > 1 ? navigate(-1) : navigate('/reports')),
     onError: (e) => setError(e.message),
   })
   const dismissMutation = useDismissReportMutation({
-    onSuccess: () => navigate('/reports'),
+    onSuccess: () => (window.history.length > 1 ? navigate(-1) : navigate('/reports')),
     onError: (e) => setError(e.message),
   })
 
@@ -76,7 +76,7 @@ export default function ReportDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/reports')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/reports'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 신고 목록
         </button>
       </div>

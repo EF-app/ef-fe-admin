@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Search } from 'lucide-react'
 import {
   useSuspensionLogs,
@@ -28,11 +29,24 @@ const STATE_OPTIONS: { value: 'ALL' | 'ACTIVE' | 'LIFTED'; label: string }[] = [
 ]
 
 export default function SuspensionLogsPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [keyword, setKeyword] = useState('')
-  const [type, setType] = useState<SuspensionType | undefined>(undefined)
-  const [state, setState] = useState<'ALL' | 'ACTIVE' | 'LIFTED'>('ALL')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    keyword: string
+    type: SuspensionType | undefined
+    state: 'ALL' | 'ACTIVE' | 'LIFTED'
+    page: number
+  }>({
+    keyword: { default: '' },
+    type: { default: undefined },
+    state: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, type, state, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setType = (v: SuspensionType | undefined) => setFilters({ type: v, page: 0 })
+  const setState = (v: 'ALL' | 'ACTIVE' | 'LIFTED') => setFilters({ state: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = useSuspensionLogs({
     user_keyword: keyword || undefined,
@@ -62,18 +76,12 @@ export default function SuspensionLogsPage() {
           </div>
           <FilterChips
             value={type}
-            onChange={(v) => {
-              setType(v)
-              setPage(0)
-            }}
+            onChange={setType}
             options={TYPE_OPTIONS}
           />
           <FilterChips
             value={state}
-            onChange={(v) => {
-              setState(v)
-              setPage(0)
-            }}
+            onChange={setState}
             options={STATE_OPTIONS}
           />
         </div>

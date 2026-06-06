@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { Search } from 'lucide-react'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import {
   usePayments,
   formatCurrency,
@@ -30,10 +31,23 @@ const TYPE_OPTIONS: { value: PaymentType | undefined; label: string }[] = [
 ]
 
 export default function PaymentsPage() {
-  const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState<PaymentStatus | undefined>(undefined)
-  const [type, setType] = useState<PaymentType | undefined>(undefined)
-  const [page, setPage] = useState(0)
+  useScrollRestoration()
+  const [filters, setFilters] = useUrlFilters<{
+    keyword: string
+    status: PaymentStatus | undefined
+    type: PaymentType | undefined
+    page: number
+  }>({
+    keyword: { default: '' },
+    status: { default: undefined },
+    type: { default: undefined },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, status, type, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setStatus = (v: PaymentStatus | undefined) => setFilters({ status: v, page: 0 })
+  const setType = (v: PaymentType | undefined) => setFilters({ type: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = usePayments({
     status,
@@ -62,18 +76,12 @@ export default function PaymentsPage() {
           </div>
           <FilterChips
             value={type}
-            onChange={(v) => {
-              setType(v)
-              setPage(0)
-            }}
+            onChange={setType}
             options={TYPE_OPTIONS}
           />
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={STATUS_OPTIONS}
           />
         </div>

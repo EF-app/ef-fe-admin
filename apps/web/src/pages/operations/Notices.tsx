@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Plus, CornerDownRight } from 'lucide-react'
 import {
   useAdminNotices,
@@ -91,10 +93,21 @@ function buildTreeRows(notices: NoticeBeSummary[]): TreeRow[] {
 }
 
 export default function NoticesPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [category, setCategory] = useState<NoticeBeCategory | undefined>(undefined)
-  const [statusFilter, setStatusFilter] = useState<NoticeBeStatus | 'ALL'>('ALL')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    category: NoticeBeCategory | undefined
+    statusFilter: NoticeBeStatus | 'ALL'
+    page: number
+  }>({
+    category: { default: undefined },
+    statusFilter: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { category, statusFilter, page } = filters
+  const setCategory = (v: NoticeBeCategory | undefined) => setFilters({ category: v, page: 0 })
+  const setStatusFilter = (v: NoticeBeStatus | 'ALL') => setFilters({ statusFilter: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = useAdminNotices({ page, category })
 
@@ -123,16 +136,13 @@ export default function NoticesPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={category}
-            onChange={(v) => {
-              setCategory(v)
-              setPage(0)
-            }}
+            onChange={setCategory}
             options={CATEGORY_OPTIONS}
           />
           <div className="w-px h-5 bg-border" />
           <FilterChips
             value={statusFilter}
-            onChange={(v) => setStatusFilter(v)}
+            onChange={setStatusFilter}
             options={STATUS_FILTER_OPTIONS}
           />
           <div className="flex-1" />

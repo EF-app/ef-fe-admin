@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Plus, FileEdit, Inbox, CheckCircle2, XCircle, Hash, MessageCircle } from 'lucide-react'
 import {
   useBalAppliesBe,
@@ -121,10 +123,21 @@ function TabButton({
 
 /* ===== 게임 목록 ===== */
 function GameList() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [category, setCategory] = useState<BalBeCategory | undefined>(undefined)
-  const [status, setStatus] = useState<BalGameBeStatus | 'ALL'>('ALL')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    category: BalBeCategory | undefined
+    status: BalGameBeStatus | 'ALL'
+    page: number
+  }>({
+    category: { default: undefined },
+    status: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { category, status, page } = filters
+  const setCategory = (v: BalBeCategory | undefined) => setFilters({ category: v, page: 0 })
+  const setStatus = (v: BalGameBeStatus | 'ALL') => setFilters({ status: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = useBalGamesBe({
     categoryCode: category,
@@ -139,19 +152,13 @@ function GameList() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={GAME_STATUS_OPTIONS}
           />
           <div className="w-px h-5 bg-border" />
           <FilterChips
             value={category}
-            onChange={(v) => {
-              setCategory(v)
-              setPage(0)
-            }}
+            onChange={setCategory}
             options={CATEGORY_OPTIONS}
           />
         </div>

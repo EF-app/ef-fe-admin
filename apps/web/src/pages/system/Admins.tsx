@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Plus, Search, Unlock } from 'lucide-react'
 import {
   useAdmins,
@@ -25,10 +27,21 @@ function isLocked(a: AdminAccount): boolean {
 }
 
 export default function AdminsPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [keyword, setKeyword] = useState('')
-  const [state, setState] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    keyword: string
+    state: 'ALL' | 'ACTIVE' | 'INACTIVE'
+    page: number
+  }>({
+    keyword: { default: '' },
+    state: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, state, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setState = (v: 'ALL' | 'ACTIVE' | 'INACTIVE') => setFilters({ state: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
   const [confirmUnlock, setConfirmUnlock] = useState<AdminAccount | null>(null)
 
   const { data, isLoading } = useAdmins({
@@ -63,10 +76,7 @@ export default function AdminsPage() {
           </div>
           <FilterChips
             value={state}
-            onChange={(v) => {
-              setState(v)
-              setPage(0)
-            }}
+            onChange={setState}
             options={STATE_OPTIONS}
           />
           <div className="flex-1" />

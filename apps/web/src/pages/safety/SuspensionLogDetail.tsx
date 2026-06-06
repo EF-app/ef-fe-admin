@@ -21,7 +21,7 @@ export default function SuspensionLogDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const liftMutation = useLiftSuspensionMutation({
-    onSuccess: () => navigate('/suspensions'),
+    onSuccess: () => (window.history.length > 1 ? navigate(-1) : navigate('/suspensions')),
     onError: (e) => {
       setError(e.message)
       setConfirmOpen(false)
@@ -48,7 +48,7 @@ export default function SuspensionLogDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/suspensions')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/suspensions'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 제재 관리
         </button>
       </div>
@@ -159,7 +159,7 @@ export default function SuspensionLogDetailPage() {
           <div className="flex justify-end gap-2">
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => navigate('/suspensions')}
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/suspensions'))}
             >
               닫기
             </button>

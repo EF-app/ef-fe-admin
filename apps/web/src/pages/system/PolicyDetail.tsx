@@ -79,7 +79,7 @@ export default function PolicyDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/policies')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/policies'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 정책 목록
         </button>
       </div>

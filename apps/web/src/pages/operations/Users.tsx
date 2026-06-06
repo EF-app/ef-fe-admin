@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Search } from 'lucide-react'
 import {
   useUsers,
@@ -50,11 +51,24 @@ function ProfileStatusBadge({ status }: { status?: ProfileStatus }) {
 }
 
 export default function UsersPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState<UserStatus | undefined>(undefined)
-  const [profileStatus, setProfileStatus] = useState<ProfileStatus | undefined>(undefined)
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    keyword: string
+    status: UserStatus | undefined
+    profileStatus: ProfileStatus | undefined
+    page: number
+  }>({
+    keyword: { default: '' },
+    status: { default: undefined },
+    profileStatus: { default: undefined },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, status, profileStatus, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setStatus = (v: UserStatus | undefined) => setFilters({ status: v, page: 0 })
+  const setProfileStatus = (v: ProfileStatus | undefined) => setFilters({ profileStatus: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = useUsers({
     keyword: keyword || undefined,
@@ -89,18 +103,12 @@ export default function UsersPage() {
           </div>
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={STATUS_OPTIONS}
           />
           <FilterChips
             value={profileStatus}
-            onChange={(v) => {
-              setProfileStatus(v)
-              setPage(0)
-            }}
+            onChange={setProfileStatus}
             options={PROFILE_STATUS_OPTIONS}
           />
         </div>

@@ -27,7 +27,7 @@ export default function AuditLogDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/audit')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/audit'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 감사 로그
         </button>
       </div>

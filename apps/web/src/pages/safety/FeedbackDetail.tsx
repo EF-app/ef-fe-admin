@@ -79,7 +79,7 @@ export default function FeedbackDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/feedback')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/feedback'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 피드백 목록
         </button>
       </div>
@@ -188,10 +188,10 @@ export default function FeedbackDetailPage() {
         {error && <div className="text-[12px] text-danger font-bold">{error}</div>}
 
         <div className="flex justify-end gap-2">
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/feedback')}>
+          <button className="btn btn-ghost btn-sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/feedback'))}>
             목록으로
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/feedback')}>
+          <button className="btn btn-secondary btn-sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/feedback'))}>
             취소
           </button>
           <button

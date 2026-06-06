@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { Plus, Send, X, Bell } from 'lucide-react'
 import {
   usePushes,
@@ -36,10 +38,21 @@ const KIND_OPTIONS: { value: PushKind | undefined; label: string }[] = [
 ]
 
 export default function PushesPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [status, setStatus] = useState<PushStatus | 'ALL'>('ALL')
-  const [kind, setKind] = useState<PushKind | undefined>(undefined)
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    status: PushStatus | 'ALL'
+    kind: PushKind | undefined
+    page: number
+  }>({
+    status: { default: 'ALL' },
+    kind: { default: undefined },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { status, kind, page } = filters
+  const setStatus = (v: PushStatus | 'ALL') => setFilters({ status: v, page: 0 })
+  const setKind = (v: PushKind | undefined) => setFilters({ kind: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = usePushes({ status, kind, page, size: 15 })
   const sendNow = useSendPushNowMutation()
@@ -59,19 +72,13 @@ export default function PushesPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={STATUS_OPTIONS}
           />
           <div className="w-px h-5 bg-border" />
           <FilterChips
             value={kind}
-            onChange={(v) => {
-              setKind(v)
-              setPage(0)
-            }}
+            onChange={setKind}
             options={KIND_OPTIONS}
           />
           <div className="flex-1" />

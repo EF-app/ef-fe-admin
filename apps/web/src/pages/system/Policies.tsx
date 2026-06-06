@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import {
   Plus,
   FileText,
@@ -352,10 +354,21 @@ function StatusBadge({ status }: { status: PolicyStatus }) {
 
 /* ===== FAQ 탭 ===== */
 function FaqTab() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [category, setCategory] = useState<FaqCategory | undefined>(undefined)
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    category: FaqCategory | undefined
+    activeFilter: 'ALL' | 'ACTIVE' | 'INACTIVE'
+    page: number
+  }>({
+    category: { default: undefined },
+    activeFilter: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { category, activeFilter, page } = filters
+  const setCategory = (v: FaqCategory | undefined) => setFilters({ category: v, page: 0 })
+  const setActiveFilter = (v: 'ALL' | 'ACTIVE' | 'INACTIVE') => setFilters({ activeFilter: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
   const deleteMutation = useDeleteFaqMutation()
   const [confirmDeleteFaq, setConfirmDeleteFaq] = useState<{ id: number; question: string } | null>(null)
 
@@ -381,19 +394,13 @@ function FaqTab() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={category}
-            onChange={(v) => {
-              setCategory(v)
-              setPage(0)
-            }}
+            onChange={setCategory}
             options={FAQ_CATEGORY_OPTIONS}
           />
           <div className="w-px h-5 bg-border" />
           <FilterChips
             value={activeFilter}
-            onChange={(v) => {
-              setActiveFilter(v)
-              setPage(0)
-            }}
+            onChange={setActiveFilter}
             options={[
               { value: 'ALL', label: '전체' },
               { value: 'ACTIVE', label: '활성' },

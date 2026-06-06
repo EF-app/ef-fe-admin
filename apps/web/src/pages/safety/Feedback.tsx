@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import {
   useFeedbacks,
   formatFromNow,
@@ -34,10 +35,21 @@ const STATUS_OPTIONS: { value: FeedbackStatus | undefined; label: string }[] = [
 ]
 
 export default function FeedbackPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [feedbackType, setFeedbackType] = useState<FeedbackType | undefined>(undefined)
-  const [status, setStatus] = useState<FeedbackStatus | undefined>(undefined)
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    feedbackType: FeedbackType | undefined
+    status: FeedbackStatus | undefined
+    page: number
+  }>({
+    feedbackType: { default: undefined },
+    status: { default: undefined },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { feedbackType, status, page } = filters
+  const setFeedbackType = (v: FeedbackType | undefined) => setFilters({ feedbackType: v, page: 0 })
+  const setStatus = (v: FeedbackStatus | undefined) => setFilters({ status: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
 
   const { data, isLoading } = useFeedbacks({
     feedback_type: feedbackType,
@@ -57,18 +69,12 @@ export default function FeedbackPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={feedbackType}
-            onChange={(v) => {
-              setFeedbackType(v)
-              setPage(0)
-            }}
+            onChange={setFeedbackType}
             options={TYPE_OPTIONS}
           />
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={STATUS_OPTIONS}
           />
         </div>

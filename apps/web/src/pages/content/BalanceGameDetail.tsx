@@ -45,7 +45,7 @@ export default function BalanceGameDetailPage() {
   return (
     <>
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-        <button onClick={() => navigate('/balance')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/balance'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 밸런스 게임 목록
         </button>
         <div className="flex items-center gap-2">

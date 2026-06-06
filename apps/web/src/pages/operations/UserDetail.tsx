@@ -196,7 +196,7 @@ export default function UserDetailPage() {
   return (
     <>
       <div className="flex items-center gap-2 mb-3">
-        <button onClick={() => navigate('/users')} className="btn btn-ghost btn-sm">
+        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/users'))} className="btn btn-ghost btn-sm">
           <ArrowLeft size={14} /> 유저 목록으로
         </button>
       </div>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import {
   usePayments,
   formatCurrency,
@@ -18,7 +19,12 @@ import { Badge } from '../../components/ui/Badge'
  * - 이 화면은 환불된 트랜잭션 모니터링용
  */
 export default function RefundsPage() {
-  const [page, setPage] = useState(0)
+  useScrollRestoration()
+  const [filters, setFilters] = useUrlFilters<{ page: number }>({
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { page } = filters
+  const setPage = (p: number) => setFilters({ page: p })
   const { data, isLoading } = usePayments({
     status: PAYMENT_STATUS.REFUNDED,
     page,

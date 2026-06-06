@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, ArrowRight } from 'lucide-react'
 import { useBlocks, formatDateTime } from '@ef-fe-admin/shared'
@@ -6,11 +5,19 @@ import Topbar from '../../components/layout/Topbar'
 import EmptyState from '../../components/ui/EmptyState'
 import Pagination from '../../components/ui/Pagination'
 import { Badge } from '../../components/ui/Badge'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 
 export default function BlocksPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [keyword, setKeyword] = useState('')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{ keyword: string; page: number }>({
+    keyword: { default: '' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
   const { data, isLoading } = useBlocks({
     keyword: keyword || undefined,
     page,

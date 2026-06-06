@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import {
   Search,
   EyeOff,
@@ -50,13 +52,24 @@ const VISIBILITY_OPTIONS: { value: 'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED'; lab
 ]
 
 export default function PostItsPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [keyword, setKeyword] = useState('')
-  const [category, setCategory] = useState<PostItCategory | undefined>(undefined)
-  const [visibility, setVisibility] = useState<'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED'>(
-    'ALL'
-  )
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    keyword: string
+    category: PostItCategory | undefined
+    visibility: 'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED'
+    page: number
+  }>({
+    keyword: { default: '' },
+    category: { default: undefined },
+    visibility: { default: 'ALL' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { keyword, category, visibility, page } = filters
+  const setKeyword = (v: string) => setFilters({ keyword: v, page: 0 })
+  const setCategory = (v: PostItCategory | undefined) => setFilters({ category: v, page: 0 })
+  const setVisibility = (v: 'ALL' | 'VISIBLE' | 'HIDDEN' | 'DELETED') => setFilters({ visibility: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
   const [selected, setSelected] = useState<PostItBe | null>(null)
 
   const { data, isLoading } = usePostItsBe({
@@ -114,10 +127,7 @@ export default function PostItsPage() {
           </div>
           <FilterChips
             value={visibility}
-            onChange={(v) => {
-              setVisibility(v)
-              setPage(0)
-            }}
+            onChange={setVisibility}
             options={VISIBILITY_OPTIONS}
           />
           <div className="text-[11.5px] text-text-soft ml-auto">
@@ -127,10 +137,7 @@ export default function PostItsPage() {
         <div className="mt-3">
           <FilterChips
             value={category}
-            onChange={(v) => {
-              setCategory(v)
-              setPage(0)
-            }}
+            onChange={setCategory}
             options={CATEGORY_OPTIONS}
           />
         </div>

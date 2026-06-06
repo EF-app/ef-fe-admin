@@ -87,12 +87,12 @@ export interface ReportGroup {
   target_preview?: string;
 }
 
-export type ReportGroupSort = 'OLDEST' | 'MOST_REPORTED';
+export type ReportGroupSort = 'LATEST' | 'OLDEST' | 'MOST_REPORTED';
 
 export interface ReportGroupListParams {
   status?: ReportStatus;
   target_type?: ReportTargetType;
-  /** OLDEST (기본, 첫 신고 오래된 순) / MOST_REPORTED (신고 건수 많은 순, 동률이면 오래된 순) */
+  /** LATEST (최신 신고 그룹 우선) / OLDEST (기본, 첫 신고 오래된 순) / MOST_REPORTED (신고 건수 많은 순, 동률이면 오래된 순) */
   sort?: ReportGroupSort;
   page?: number;
   size?: number;

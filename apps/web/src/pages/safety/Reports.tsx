@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { parseInt0, useUrlFilters } from '../../hooks/useUrlFilters'
+import { useScrollRestoration } from '../../hooks/useScrollRestoration'
 import { ExternalLink, ShieldCheck } from 'lucide-react'
 import {
   useReportsGrouped,
@@ -31,7 +33,8 @@ const TARGET_OPTIONS: { value: ReportTargetType | undefined; label: string }[] =
   { value: 'CHAT_IMAGE', label: '채팅 이미지' },
 ]
 
-const SORT_OPTIONS: { value: 'OLDEST' | 'MOST_REPORTED'; label: string }[] = [
+const SORT_OPTIONS: { value: 'LATEST' | 'OLDEST' | 'MOST_REPORTED'; label: string }[] = [
+  { value: 'LATEST', label: '최신순' },
   { value: 'OLDEST', label: '오래된순' },
   { value: 'MOST_REPORTED', label: '신고건수많은순' },
 ]
@@ -102,11 +105,24 @@ function resolveGroupOutcome(g: ReportGroup):
 }
 
 export default function ReportsPage() {
+  useScrollRestoration()
   const navigate = useNavigate()
-  const [status, setStatus] = useState<ReportStatus | undefined>('PENDING')
-  const [target, setTarget] = useState<ReportTargetType | undefined>(undefined)
-  const [sort, setSort] = useState<'OLDEST' | 'MOST_REPORTED'>('OLDEST')
-  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useUrlFilters<{
+    status: ReportStatus | undefined
+    target: ReportTargetType | undefined
+    sort: 'LATEST' | 'OLDEST' | 'MOST_REPORTED'
+    page: number
+  }>({
+    status: { default: 'PENDING' as ReportStatus | undefined },
+    target: { default: undefined },
+    sort: { default: 'OLDEST' },
+    page: { default: 0, parse: parseInt0 },
+  })
+  const { status, target, sort, page } = filters
+  const setStatus = (v: ReportStatus | undefined) => setFilters({ status: v, page: 0 })
+  const setTarget = (v: ReportTargetType | undefined) => setFilters({ target: v, page: 0 })
+  const setSort = (v: 'LATEST' | 'OLDEST' | 'MOST_REPORTED') => setFilters({ sort: v, page: 0 })
+  const setPage = (p: number) => setFilters({ page: p })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const { data, isLoading } = useReportsGrouped({
@@ -137,26 +153,17 @@ export default function ReportsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <FilterChips
             value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setPage(0)
-            }}
+            onChange={setStatus}
             options={STATUS_OPTIONS}
           />
           <FilterChips
             value={target}
-            onChange={(v) => {
-              setTarget(v)
-              setPage(0)
-            }}
+            onChange={setTarget}
             options={TARGET_OPTIONS}
           />
           <FilterChips
             value={sort}
-            onChange={(v) => {
-              setSort(v)
-              setPage(0)
-            }}
+            onChange={setSort}
             options={SORT_OPTIONS}
           />
         </div>
