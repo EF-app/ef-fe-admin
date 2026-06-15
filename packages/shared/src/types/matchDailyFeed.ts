@@ -1,6 +1,6 @@
 /**
  * match_daily_feed 관리자 조회 — BE AdminDailyFeedItemRspDto 와 1:1.
- *  PK 는 (feedDate, viewerId, rank). admin 검색은 이 셋 + targetId + slotType 동적 필터.
+ *  PK 는 (feedDate, viewerId, matchRank). admin 검색은 이 셋 + targetId + slotType 동적 필터.
  */
 
 export type DailyFeedSlotType =
@@ -14,7 +14,7 @@ export interface DailyFeedItem {
   feedDate: string;          // ISO date
   viewerId: number;
   viewerNickname: string;
-  rank: number;
+  matchRank: number;
   targetId: number;
   targetNickname: string;
   slotType: DailyFeedSlotType;
@@ -34,7 +34,7 @@ export interface DailyFeedListParams {
   targetId?: number;
   feedDate?: string;         // 'yyyy-MM-dd'
   slotType?: DailyFeedSlotType;
-  rank?: number;
+  matchRank?: number;
   page?: number;
   size?: number;
 }

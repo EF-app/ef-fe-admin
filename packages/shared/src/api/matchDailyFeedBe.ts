@@ -28,7 +28,7 @@ export const matchDailyFeedBeApi = {
         targetId: params?.targetId,
         feedDate: params?.feedDate,
         slotType: params?.slotType,
-        rank: params?.rank,
+        matchRank: params?.matchRank,
         page: params?.page,
         size: params?.size,
       },

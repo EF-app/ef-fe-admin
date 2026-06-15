@@ -1232,7 +1232,8 @@ export function useMatchConfig(options?: QueryOpts<MatchConfigItem[]>) {
   return useQuery<MatchConfigItem[], NormalizedError>({
     queryKey: QUERY_KEYS.MATCH_CONFIG,
     queryFn: isMockMode() ? mocked(mockMatchConfig) : matchConfigBeApi.getAll,
-    placeholderData: mockMatchConfig,
+    // placeholderData(mockMatchConfig) 제거 — placeholder 가 있으면 BE 응답 전부터
+    // data 가 mock 으로 채워져 화면이 고정값에 묶이는 문제가 있었음. 실데이터만 표시.
     ...options,
   });
 }
@@ -1251,8 +1252,8 @@ export function useUpdateMatchConfigMutation(
             const target = mockMatchConfig.find((r) => r.configKey === e.configKey);
             if (target) {
               target.configValue = e.configValue;
-              target.updatedAt = now;
-              target.updatedBy = 'admin:mock';
+              target.updateTime = now;
+              target.updateUser = 1;
             }
           });
           return Promise.resolve([...mockMatchConfig]);
@@ -1341,8 +1342,8 @@ export function useRunFullBatchMutation(
 
 /**
  * 매칭 일일 피드 조회 (match_daily_feed) — 관리자 디버깅 / CS 응대용.
- *  필터: viewerId / targetId / feedDate / slotType / rank.
- *  정렬은 BE 가 고정 (feed_date DESC, viewer_id, rank).
+ *  필터: viewerId / targetId / feedDate / slotType / matchRank.
+ *  정렬은 BE 가 고정 (feed_date DESC, viewer_id, match_rank).
  *  응답: DailyFeedPage { content, page, size, hasNext } — COUNT(*) 제거판.
  *  staleTime 5분 — 같은 필터로 재진입 시 즉시 표시.
  *  enabled 옵션 — 화면이 첫 진입 시 자동 fetch 안 하도록 lazy 제어 가능.

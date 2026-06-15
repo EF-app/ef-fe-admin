@@ -56,8 +56,8 @@ export interface MatchConfigItem {
   configValue: string;
   valueType: MatchConfigValueType;
   description: string | null;
-  updatedAt: string;
-  updatedBy: string | null;
+  updateTime: string;
+  updateUser: number | null;
 }
 
 /** PATCH /v1/admin/matches/config 의 body — 변경된 entries 만 */

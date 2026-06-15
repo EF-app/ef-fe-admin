@@ -7,7 +7,7 @@
  *  - sortKey 가중치 4개 (weight_*) 합 1.0 클라이언트 사전 검증 (BE 도 거절)
  *  - Dirty tracking — 변경된 키만 PATCH 로 전송
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   useMatchConfig,
   useUpdateMatchConfigMutation,
@@ -60,14 +60,28 @@ export default function MatchingRatesPage() {
   const [error, setError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  // 초기 로드 — data 가 처음 도착하면 draft 채움
+  // data 식별자(키:값 모음) — BE 실데이터 도착·refetch·저장 후 변하면 draft 재동기화 트리거.
+  const dataFingerprint = useMemo(
+    () => (data ? data.map((r) => `${r.configKey}:${r.configValue}`).join('|') : ''),
+    [data],
+  )
+  const syncedFingerprintRef = useRef<string | null>(null)
+
+  // draft 동기화 — data 가 바뀔 때마다 실값으로 채움.
+  //  · 첫 로드/refetch/저장 후처럼 dirty 가 없을 때만 덮어쓴다.
+  //  · 사용자가 편집 중(dirty)이면 입력값 보존 — 편집 종료(초기화/저장) 후 동기화.
   useEffect(() => {
-    if (data && Object.keys(draft).length === 0) {
-      const init: Record<string, string> = {}
-      data.forEach((r) => { init[r.configKey] = r.configValue })
-      setDraft(init)
-    }
-  }, [data, draft])
+    if (!data) return
+    if (syncedFingerprintRef.current === dataFingerprint) return
+    const hasDirty = data.some(
+      (r) => draft[r.configKey] !== undefined && draft[r.configKey] !== r.configValue,
+    )
+    if (Object.keys(draft).length > 0 && hasDirty) return
+    const init: Record<string, string> = {}
+    data.forEach((r) => { init[r.configKey] = r.configValue })
+    setDraft(init)
+    syncedFingerprintRef.current = dataFingerprint
+  }, [data, dataFingerprint, draft])
 
   const byKey = useMemo(() => {
     const map: Record<string, MatchConfigItem> = {}
@@ -85,7 +99,7 @@ export default function MatchingRatesPage() {
   // 마지막 수정 메타 — updatedAt 최대값 + 그 row 의 updatedBy
   const lastUpdate = useMemo(() => {
     if (!data || data.length === 0) return null
-    return data.reduce((acc, r) => (acc && acc.updatedAt > r.updatedAt ? acc : r))
+    return data.reduce((acc, r) => (acc && acc.updateTime > r.updateTime ? acc : r))
   }, [data])
 
   // sortKey 가중치 합
@@ -161,8 +175,8 @@ export default function MatchingRatesPage() {
       <div className="card mb-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-[12px] text-text-soft font-bold">
-            마지막 수정: {formatDateTime(lastUpdate?.updatedAt)} ·{' '}
-            {lastUpdate?.updatedBy ?? '-'}
+            마지막 수정: {formatDateTime(lastUpdate?.updateTime)} ·{' '}
+            {lastUpdate?.updateUser ?? '-'}
           </div>
           <div className="flex items-center gap-2">
             <span className={`badge ${weightSumOk ? 'badge-normal' : 'badge-danger'}`}>

@@ -2,8 +2,8 @@
  * @file apps/web/src/pages/matching/MatchingDailyFeed.tsx
  * @description match_daily_feed 관리자 조회 화면.
  *
- *  필터: 날짜 (default = 오늘 KST) / viewerId / targetId / rank / slotType.
- *  PK = (feedDate, viewerId, rank) — 세 필드 모두 입력하면 단일 row 핀포인트.
+ *  필터: 날짜 (default = 오늘 KST) / viewerId / targetId / matchRank / slotType.
+ *  PK = (feedDate, viewerId, matchRank) — 세 필드 모두 입력하면 단일 row 핀포인트.
  *  viewer/target id 클릭 → /users/:id 로 이동.
  *  tags_json 은 컬럼이 길어 "보기" → 모달.
  *
@@ -49,7 +49,7 @@ export default function MatchingDailyFeedPage() {
   const [draftFeedDate, setDraftFeedDate] = useState(TODAY)
   const [draftViewerId, setDraftViewerId] = useState('')
   const [draftTargetId, setDraftTargetId] = useState('')
-  const [draftRank, setDraftRank] = useState('')
+  const [draftMatchRank, setDraftRank] = useState('')
   const [draftSlot, setDraftSlot] = useState<DailyFeedSlotType | ''>('')
 
   // 실 fetch params — [적용] 클릭 시에만 갱신
@@ -74,7 +74,7 @@ export default function MatchingDailyFeedPage() {
       viewerIdFrom: parsed?.from,
       viewerIdTo: parsed?.to,
       targetId: draftTargetId ? Number(draftTargetId) : undefined,
-      rank: draftRank ? Number(draftRank) : undefined,
+      matchRank: draftMatchRank ? Number(draftMatchRank) : undefined,
       slotType: draftSlot || undefined,
       page: 0,
       size: PAGE_SIZE,
@@ -100,7 +100,7 @@ export default function MatchingDailyFeedPage() {
     <>
       <Topbar
         title="일일 피드 조회"
-        subtitle="match_daily_feed — 뷰어당/날짜당 50 row. PK 는 (feedDate, viewerId, rank). 필터 적용 시 BE 호출."
+        subtitle="match_daily_feed — 뷰어당/날짜당 50 row. PK 는 (feedDate, viewerId, matchRank). 필터 적용 시 BE 호출."
       />
 
       {/* ───── 필터 카드 ───── */}
@@ -133,10 +133,10 @@ export default function MatchingDailyFeedPage() {
               min={1}
             />
           </FilterField>
-          <FilterField label="rank (1~50)">
+          <FilterField label="matchRank (1~50)">
             <input
               type="number"
-              value={draftRank}
+              value={draftMatchRank}
               onChange={(e) => setDraftRank(e.target.value)}
               placeholder="예: 1"
               className="filter-input"
@@ -199,7 +199,7 @@ export default function MatchingDailyFeedPage() {
                 <tr className="text-left">
                   <th className="py-2 pr-3 font-extrabold">날짜</th>
                   <th className="py-2 pr-3 font-extrabold">뷰어</th>
-                  <th className="py-2 pr-3 font-extrabold text-right">rank</th>
+                  <th className="py-2 pr-3 font-extrabold text-right">matchRank</th>
                   <th className="py-2 pr-3 font-extrabold">타겟</th>
                   <th className="py-2 pr-3 font-extrabold">slot</th>
                   <th className="py-2 pr-3 font-extrabold text-right">sortKey</th>
@@ -210,7 +210,7 @@ export default function MatchingDailyFeedPage() {
               <tbody>
                 {(data?.content ?? []).map((row) => (
                   <TableRow
-                    key={`${row.feedDate}-${row.viewerId}-${row.rank}`}
+                    key={`${row.feedDate}-${row.viewerId}-${row.matchRank}`}
                     row={row}
                     onOpenTags={() => setTagsModalRow(row)}
                   />
@@ -305,7 +305,7 @@ function TableRow({
       <td className="py-2 pr-3">
         <UserLink id={row.viewerId} nickname={row.viewerNickname} onClick={() => navigate(`/users/${row.viewerId}`)} />
       </td>
-      <td className="py-2 pr-3 text-right font-extrabold">{row.rank}</td>
+      <td className="py-2 pr-3 text-right font-extrabold">{row.matchRank}</td>
       <td className="py-2 pr-3">
         <UserLink id={row.targetId} nickname={row.targetNickname} onClick={() => navigate(`/users/${row.targetId}`)} />
       </td>
@@ -424,7 +424,7 @@ function TagsJsonModal({
           <div>
             <div className="text-[15px] font-extrabold">tags_json</div>
             <div className="text-[11.5px] text-text-soft font-bold mt-0.5">
-              {row.feedDate} · viewer #{row.viewerId} · rank {row.rank} · target #{row.targetId}
+              {row.feedDate} · viewer #{row.viewerId} · matchRank {row.matchRank} · target #{row.targetId}
             </div>
           </div>
           <button
