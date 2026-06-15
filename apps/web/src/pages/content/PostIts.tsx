@@ -419,7 +419,7 @@ function PostItDetailModal({
               {showAuthor ? (
                 <>
                   <button
-                    onClick={() => navigate(`/users/${post.userUuid}`)}
+                    onClick={() => navigate(`/users/${post.userId}`)}
                     className="font-extrabold text-point-dark hover:underline"
                   >
                     {post.userNickname}

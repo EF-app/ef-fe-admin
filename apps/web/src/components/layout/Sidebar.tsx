@@ -23,6 +23,8 @@ import {
   MessageSquare,
   AlertOctagon,
   Bell,
+  Wrench,
+  Calendar,
 } from 'lucide-react'
 import { useDashboardAlerts, useReportsGrouped } from '@ef-fe-admin/shared'
 
@@ -68,6 +70,8 @@ const SECTIONS: { title: string; items: NavItemDef[] }[] = [
     items: [
       { to: '/matching', label: '매칭 대시보드', icon: <Heart size={16} /> },
       { to: '/matching/rates', label: '매칭률 조정', icon: <Filter size={16} /> },
+      { to: '/matching/ops', label: '매칭 운영 도구', icon: <Wrench size={16} /> },
+      { to: '/matching/daily-feed', label: '일일 피드 조회', icon: <Calendar size={16} /> },
     ],
   },
   {

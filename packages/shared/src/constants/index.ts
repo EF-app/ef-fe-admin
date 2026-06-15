@@ -42,6 +42,8 @@ export const QUERY_KEYS = {
   MATCHING_FUNNEL: ['matching', 'funnel'] as const,
   MATCHING_DAILY: (days: number) => ['matching', 'daily', days] as const,
   MATCHING_WEIGHTS: ['matching', 'weights'] as const,
+  MATCH_CONFIG: ['match-config'] as const,
+  MATCH_DAILY_FEED: (params?: unknown) => ['match-daily-feed', params] as const,
   ADMINS: (params?: unknown) => ['admins', params] as const,
   ADMIN_DETAIL: (id: string | number) => ['admins', id] as const,
   POLICIES: (params?: unknown) => ['policies', params] as const,

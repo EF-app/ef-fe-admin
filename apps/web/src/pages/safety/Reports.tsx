@@ -54,9 +54,9 @@ function groupKey(g: ReportGroup) {
  */
 function getContentLink(g: ReportGroup): { href: string; label: string } | null {
   if (g.target_type === 'PROFILE') {
-    // BE enrich 의 target_user_uuid 사용 (admin /users/{uuid} 라우트 정합)
-    const userUuid = g.target_user_uuid ?? g.reports.find((r) => r.target_user_uuid)?.target_user_uuid
-    return userUuid ? { href: `/users/${userUuid}`, label: '프로필 보기' } : null
+    // BE enrich 의 target_user_id 사용 (admin /users/{id} 라우트 정합)
+    const userId = g.target_user_id ?? g.reports.find((r) => r.target_user_id)?.target_user_id
+    return userId ? { href: `/users/${userId}`, label: '프로필 보기' } : null
   }
   if (g.target_type === 'POST_IT')
     return { href: `/post-its?focus=${g.target_id}`, label: '포스트잇 보기' }
@@ -74,9 +74,9 @@ function getContentLink(g: ReportGroup): { href: string; label: string } | null 
 /** PROFILE 외 타입에서 따로 "작성자 프로필" 점프가 가능한 경우. */
 function getTargetUserLink(g: ReportGroup): string | null {
   if (g.target_type === 'PROFILE') return null
-  // BE enrich 의 target_user_uuid 사용
-  const userUuid = g.target_user_uuid ?? g.reports.find((r) => r.target_user_uuid)?.target_user_uuid
-  return userUuid ? `/users/${userUuid}` : null
+  // BE enrich 의 target_user_id 사용
+  const userId = g.target_user_id ?? g.reports.find((r) => r.target_user_id)?.target_user_id
+  return userId ? `/users/${userId}` : null
 }
 
 /**

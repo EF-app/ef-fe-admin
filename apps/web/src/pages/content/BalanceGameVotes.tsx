@@ -159,7 +159,7 @@ function VoterRow({
           <button
             type="button"
             className="font-extrabold hover:text-point-dark hover:underline text-left"
-            onClick={() => navigate(`/users/${v.userUuid}`)}
+            onClick={() => navigate(`/users/${v.userId}`)}
           >
             {v.userNickname}
           </button>

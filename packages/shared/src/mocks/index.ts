@@ -18,6 +18,7 @@ export * from './bannedWords';
 export * from './premium';
 export * from './revenue';
 export * from './matchingMetrics';
+export * from './matchDailyFeed';
 export * from './policies';
 export * from './systemMessages';
 export * from './noticesBe';

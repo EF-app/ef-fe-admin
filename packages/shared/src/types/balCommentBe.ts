@@ -17,7 +17,6 @@ export interface BalCommentReplyBe {
 
   /** 실제 작성자 (어드민만 노출) */
   authorUserId: number;
-  authorUserUuid: string;
   authorRealNickname: string;
 
   text: string;
@@ -40,7 +39,6 @@ export interface BalCommentBe {
   avColor: CommentAvatarColor;
 
   authorUserId: number;
-  authorUserUuid: string;
   authorRealNickname: string;
 
   /** 어떤 선택지에 투표했는지 (없을 수도) */

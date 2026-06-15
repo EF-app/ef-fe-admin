@@ -44,3 +44,23 @@ export interface UpdateMatchingWeightsRequest {
   base_rate: number;
   premium_boost: number;
 }
+
+/**
+ * code_match_config 1행 — BE AdminMatchConfigItemRspDto 와 1:1.
+ *  valueType: 'INT' | 'DOUBLE' | 'JSON' (스칼라는 string 으로 저장, JSON 은 JSON 문자열).
+ */
+export type MatchConfigValueType = 'INT' | 'DOUBLE' | 'JSON';
+
+export interface MatchConfigItem {
+  configKey: string;
+  configValue: string;
+  valueType: MatchConfigValueType;
+  description: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** PATCH /v1/admin/matches/config 의 body — 변경된 entries 만 */
+export interface MatchConfigUpdateRequest {
+  entries: { configKey: string; configValue: string }[];
+}

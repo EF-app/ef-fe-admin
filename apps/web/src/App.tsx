@@ -27,6 +27,8 @@ import FeedbackDetailPage from './pages/safety/FeedbackDetail'
 // 매칭
 import MatchingPage from './pages/matching/Matching'
 import MatchingRatesPage from './pages/matching/MatchingRates'
+import MatchingOpsPage from './pages/matching/MatchingOps'
+import MatchingDailyFeedPage from './pages/matching/MatchingDailyFeed'
 
 // 콘텐츠
 import BalanceGamesPage from './pages/content/BalanceGames'
@@ -119,6 +121,8 @@ export default function App() {
         {/* 매칭 */}
         <Route path="matching" element={<MatchingPage />} />
         <Route path="matching/rates" element={<MatchingRatesPage />} />
+        <Route path="matching/ops" element={<MatchingOpsPage />} />
+        <Route path="matching/daily-feed" element={<MatchingDailyFeedPage />} />
 
         {/* 콘텐츠 */}
         <Route path="balance" element={<BalanceGamesPage />} />

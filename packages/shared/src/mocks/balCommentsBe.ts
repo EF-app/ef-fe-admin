@@ -34,7 +34,6 @@ function buildReply(
     letter: p.letter,
     avColor: p.avColor,
     authorUserId: p.userId,
-    authorUserUuid: p.uuid,
     authorRealNickname: p.realNickname,
     text,
     createTime: new Date(Date.now() - hoursAgo * 60 * 60 * 1000)
@@ -70,7 +69,6 @@ function buildComment(
     letter: p.letter,
     avColor: p.avColor,
     authorUserId: p.userId,
-    authorUserUuid: p.uuid,
     authorRealNickname: p.realNickname,
     voteChoice: opts.voteChoice ?? null,
     text,

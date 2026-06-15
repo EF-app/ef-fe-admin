@@ -22,6 +22,18 @@ import { suspensionLogsApi } from '../api/suspensionLogs';
 import { postItsApi } from '../api/postIts';
 import { feedbackBeApi } from '../api/feedbackBe';
 import { accountBeApi } from '../api/accountBe';
+import { matchConfigBeApi } from '../api/matchConfigBe';
+import { matchOpsBeApi } from '../api/matchOpsBe';
+import { matchDailyFeedBeApi } from '../api/matchDailyFeedBe';
+import type {
+  MatchUserBatchResult,
+  MatchRecoverBatchResult,
+  MatchFullBatchResult,
+} from '../api/matchOpsBe';
+import type {
+  DailyFeedListParams,
+  DailyFeedPage,
+} from '../types/matchDailyFeed';
 import type { AdminPasswordResetRequest } from '../api/accountBe';
 import type {
   AdminAccount,
@@ -120,6 +132,8 @@ import {
   mockMatchingFunnel,
   mockMatchingDailyChart,
   mockMatchingWeights,
+  mockMatchConfig,
+  pickMockDailyFeedPage,
   mockAdminsPage,
   mockAdmins,
   mockPoliciesPage,
@@ -145,6 +159,8 @@ import type {
   MatchingDailyPoint,
   MatchingWeights,
   UpdateMatchingWeightsRequest,
+  MatchConfigItem,
+  MatchConfigUpdateRequest,
 } from '../types/matchingMetrics';
 import type {
   AdminListParams,
@@ -1204,6 +1220,145 @@ export function useUpdateMatchingWeightsMutation(
       qc.invalidateQueries({ queryKey: QUERY_KEYS.MATCHING_WEIGHTS });
       options?.onSuccess?.(...args);
     },
+  });
+}
+
+/**
+ * 매칭 설정값 (code_match_config 38행) — BE AdminMatchController.
+ *  GET   /v1/admin/matches/config        (전체 조회)
+ *  PATCH /v1/admin/matches/config        (변경된 entries 만)
+ */
+export function useMatchConfig(options?: QueryOpts<MatchConfigItem[]>) {
+  return useQuery<MatchConfigItem[], NormalizedError>({
+    queryKey: QUERY_KEYS.MATCH_CONFIG,
+    queryFn: isMockMode() ? mocked(mockMatchConfig) : matchConfigBeApi.getAll,
+    placeholderData: mockMatchConfig,
+    ...options,
+  });
+}
+
+export function useUpdateMatchConfigMutation(
+  options?: MutationOpts<MatchConfigItem[], MatchConfigUpdateRequest>
+) {
+  const qc = useQueryClient();
+  return useMutation<MatchConfigItem[], NormalizedError, MatchConfigUpdateRequest>({
+    ...options,
+    mutationFn: isMockMode()
+      ? (payload) => {
+          // mock — 순회하며 mockMatchConfig 갱신 후 반환
+          const now = new Date().toISOString();
+          payload.entries.forEach((e) => {
+            const target = mockMatchConfig.find((r) => r.configKey === e.configKey);
+            if (target) {
+              target.configValue = e.configValue;
+              target.updatedAt = now;
+              target.updatedBy = 'admin:mock';
+            }
+          });
+          return Promise.resolve([...mockMatchConfig]);
+        }
+      : (payload) => matchConfigBeApi.update(payload),
+    onSuccess: (...args) => {
+      // BE 가 변경 후 전체 list 반환 — cache 에 직접 setData 하면 refetch 불필요
+      qc.setQueryData<MatchConfigItem[]>(QUERY_KEYS.MATCH_CONFIG, args[0]);
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+/**
+ * 매칭 운영 도구 — 특정 유저 피드 강제 재계산.
+ *  BE: POST /v1/admin/matches/batch/user/{userId} (어뷰즈 가드 우회).
+ *  성공 시 해당 유저의 user-detail / users 캐시 무효화.
+ */
+export function useRecomputeUserMutation(
+  options?: MutationOpts<MatchUserBatchResult, number>
+) {
+  const qc = useQueryClient();
+  return useMutation<MatchUserBatchResult, NormalizedError, number>({
+    ...options,
+    mutationFn: isMockMode()
+      ? (userId) =>
+          Promise.resolve({
+            userId,
+            cardCount: 45,
+            durationMs: 287,
+          })
+      : (userId) => matchOpsBeApi.runUserBatch(userId),
+    onSuccess: (...args) => {
+      const [, userId] = args;
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(userId) });
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+/**
+ * 매칭 운영 도구 — 보정 배치 강제 실행.
+ *  BE: POST /v1/admin/matches/batch/recover (ShedLock 우회, idempotent).
+ *  04:00 / 05:00 cron 모두 누락 의심 시 일괄 복구.
+ */
+export function useRunBatchRetryMutation(
+  options?: MutationOpts<MatchRecoverBatchResult, void>
+) {
+  return useMutation<MatchRecoverBatchResult, NormalizedError, void>({
+    ...options,
+    mutationFn: isMockMode()
+      ? () =>
+          Promise.resolve({
+            targetCount: 12,
+            recoverCount: 10,
+            coldStartCount: 1,
+            failCount: 1,
+            durationMs: 8421,
+          })
+      : () => matchOpsBeApi.runRecoverBatch(),
+  });
+}
+
+/**
+ * 매칭 운영 도구 — 04:00 정상 배치 강제 실행 (활성 viewer 전체 재계산).
+ *  BE: POST /v1/admin/matches/batch/full (ShedLock 우회, idempotent).
+ *  매칭 로직 변경 후 즉시 반영하고 싶을 때 사용. 수분 이상 걸릴 수 있음.
+ */
+export function useRunFullBatchMutation(
+  options?: MutationOpts<MatchFullBatchResult, void>
+) {
+  return useMutation<MatchFullBatchResult, NormalizedError, void>({
+    ...options,
+    mutationFn: isMockMode()
+      ? () =>
+          Promise.resolve({
+            totalViewers: 7875,
+            successCount: 7870,
+            failCount: 5,
+            durationMs: 184321,
+          })
+      : () => matchOpsBeApi.runFullBatch(),
+  });
+}
+
+/**
+ * 매칭 일일 피드 조회 (match_daily_feed) — 관리자 디버깅 / CS 응대용.
+ *  필터: viewerId / targetId / feedDate / slotType / rank.
+ *  정렬은 BE 가 고정 (feed_date DESC, viewer_id, rank).
+ *  응답: DailyFeedPage { content, page, size, hasNext } — COUNT(*) 제거판.
+ *  staleTime 5분 — 같은 필터로 재진입 시 즉시 표시.
+ *  enabled 옵션 — 화면이 첫 진입 시 자동 fetch 안 하도록 lazy 제어 가능.
+ */
+export function useDailyFeed(
+  params?: DailyFeedListParams,
+  options?: QueryOpts<DailyFeedPage>,
+) {
+  return useQuery<DailyFeedPage, NormalizedError>({
+    queryKey: QUERY_KEYS.MATCH_DAILY_FEED(params),
+    queryFn: isMockMode()
+      ? mocked(pickMockDailyFeedPage(params?.page ?? 0, params?.size ?? 25))
+      : () => matchDailyFeedBeApi.list(params),
+    placeholderData: pickMockDailyFeedPage(params?.page ?? 0, params?.size ?? 25),
+    staleTime: 1000 * 60 * 5,
+    ...options,
   });
 }
 

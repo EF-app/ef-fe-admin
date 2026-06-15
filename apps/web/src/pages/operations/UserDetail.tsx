@@ -1445,9 +1445,9 @@ function MadeReportList({ items }: { items: MadeReports }) {
                   <td>
                     <button
                       type="button"
-                      disabled={!r.target_user_uuid}
+                      disabled={!r.target_user_id}
                       onClick={() =>
-                        r.target_user_uuid && navigate(`/users/${r.target_user_uuid}`)
+                        r.target_user_id && navigate(`/users/${r.target_user_id}`)
                       }
                       className="font-extrabold hover:text-point-dark hover:underline disabled:text-text disabled:no-underline text-left"
                     >
@@ -1626,9 +1626,9 @@ function BlockedUsersList({ items }: { items: Blocks }) {
                     <button
                       className="font-extrabold hover:text-point-dark hover:underline disabled:text-text"
                       onClick={() =>
-                        b.blocked_user_uuid && navigate(`/users/${b.blocked_user_uuid}`)
+                        b.blocked_user_id && navigate(`/users/${b.blocked_user_id}`)
                       }
-                      disabled={!b.blocked_user_uuid}
+                      disabled={!b.blocked_user_id}
                     >
                       {b.blocked_user_nickname}
                     </button>
@@ -1678,9 +1678,9 @@ function BlockedByList({ items }: { items: BlockedBy }) {
                     <button
                       className="font-extrabold hover:text-point-dark hover:underline disabled:text-text"
                       onClick={() =>
-                        b.blocker_user_uuid && navigate(`/users/${b.blocker_user_uuid}`)
+                        b.blocker_user_id && navigate(`/users/${b.blocker_user_id}`)
                       }
-                      disabled={!b.blocker_user_uuid}
+                      disabled={!b.blocker_user_id}
                     >
                       {b.blocker_user_nickname}
                     </button>

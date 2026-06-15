@@ -1,47 +1,103 @@
-import { useEffect, useState } from 'react'
+/**
+ * @file apps/web/src/pages/matching/MatchingRates.tsx
+ * @description code_match_config 38행 운영 화면.
+ *
+ *  BE 와 1:1 — AdminMatchController GET/PATCH /v1/admin/matches/config.
+ *  - 키별 valueType 에 맞춰 INT 숫자입력 / DOUBLE 0~1 슬라이더 / JSON textarea 분기
+ *  - sortKey 가중치 4개 (weight_*) 합 1.0 클라이언트 사전 검증 (BE 도 거절)
+ *  - Dirty tracking — 변경된 키만 PATCH 로 전송
+ */
+import { useEffect, useMemo, useState } from 'react'
 import {
-  useMatchingWeights,
-  useUpdateMatchingWeightsMutation,
+  useMatchConfig,
+  useUpdateMatchConfigMutation,
   formatDateTime,
 } from '@ef-fe-admin/shared'
-import type { UpdateMatchingWeightsRequest } from '@ef-fe-admin/shared'
+import type { MatchConfigItem } from '@ef-fe-admin/shared'
 import Topbar from '../../components/layout/Topbar'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
-const WEIGHT_FIELDS: { key: keyof UpdateMatchingWeightsRequest; label: string; hint: string }[] = [
-  { key: 'age_weight', label: '나이 일치', hint: '비슷한 나이대 가산점' },
-  { key: 'area_weight', label: '지역 일치', hint: '같은 지역 가산점' },
-  { key: 'mbti_weight', label: 'MBTI 궁합', hint: 'MBTI 호환표 기준' },
-  { key: 'purpose_weight', label: '매칭 목적', hint: '친구·연인 일치도' },
-  { key: 'drinking_weight', label: '음주 습관', hint: '음주 빈도 유사도' },
-  { key: 'smoking_weight', label: '흡연 습관', hint: '흡연 빈도 유사도' },
-  { key: 'hobby_weight', label: '취미·관심사', hint: '공통 태그 개수' },
+/** 14개 섹션 — code_match_config 의 키들을 운영자 친화 그룹핑. */
+const SECTIONS: { title: string; emoji: string; keys: string[] }[] = [
+  { title: 'sortKey 가중치 (합 = 1.0)', emoji: '⚖️',
+    keys: ['weight_keyword', 'weight_ideal', 'weight_lifestyle', 'weight_location'] },
+  { title: '중요포인트 가산', emoji: '⭐',
+    keys: ['bump_keyword', 'bump_ideal', 'bump_lifestyle', 'bump_location'] },
+  { title: '키워드', emoji: '🏷️',
+    keys: ['keyword_base', 'keyword_coef', 'keyword_tag_threshold'] },
+  { title: '이상형', emoji: '💜',
+    keys: ['ideal_both_min', 'i_like_threshold', 'likes_me_threshold', 'ideal_min_fields', 'ideal_few_penalty'] },
+  { title: '라이프', emoji: '🍃',
+    keys: ['lifestyle_tag_threshold'] },
+  { title: '지역', emoji: '📍',
+    keys: ['region_tiers', 'location_tag_threshold'] },
+  { title: '후보 필터', emoji: '🔎',
+    keys: ['age_max_diff', 'last_active_days', 'pass_cooldown_days'] },
+  { title: '풀', emoji: '🪣',
+    keys: ['pool_size', 'newbie_ratio', 'newbie_window_days', 'radius_steps_km'] },
+  { title: '슬롯', emoji: '🎯',
+    keys: ['daily_show', 'newbie_floor', 'random_slots'] },
+  { title: '같은카테고리', emoji: '🧩',
+    keys: ['category_mate_cats', 'category_mate_min'] },
+  { title: '개인키워드', emoji: '✨',
+    keys: ['custom_kw_min'] },
+  { title: '표시', emoji: '👀',
+    keys: ['keyword_chip_count'] },
+  { title: '신규자 fan-out', emoji: '🌱',
+    keys: ['fresh_newbie_window_hours', 'fresh_newbie_fan_out', 'fresh_newbie_reserved_slots', 'fresh_newbie_reserved_step'] },
+  { title: '어뷰즈 가드', emoji: '🛡️',
+    keys: ['recompute_action_threshold', 'recompute_max_per_day'] },
 ]
 
+const WEIGHT_KEYS = ['weight_keyword', 'weight_ideal', 'weight_lifestyle', 'weight_location'] as const
+
 export default function MatchingRatesPage() {
-  const { data, isLoading } = useMatchingWeights()
-  const [form, setForm] = useState<UpdateMatchingWeightsRequest | null>(null)
+  const { data, isLoading } = useMatchConfig()
+
+  // 키 → 현재 입력값. 원본은 data 그대로 유지하고 dirty 비교에 사용.
+  const [draft, setDraft] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  // 초기 로드 — data 가 처음 도착하면 draft 채움
   useEffect(() => {
-    if (data && !form) {
-      setForm({
-        age_weight: data.age_weight,
-        area_weight: data.area_weight,
-        mbti_weight: data.mbti_weight,
-        purpose_weight: data.purpose_weight,
-        drinking_weight: data.drinking_weight,
-        smoking_weight: data.smoking_weight,
-        hobby_weight: data.hobby_weight,
-        base_rate: data.base_rate,
-        premium_boost: data.premium_boost,
-      })
+    if (data && Object.keys(draft).length === 0) {
+      const init: Record<string, string> = {}
+      data.forEach((r) => { init[r.configKey] = r.configValue })
+      setDraft(init)
     }
-  }, [data, form])
+  }, [data, draft])
 
-  const mutation = useUpdateMatchingWeightsMutation({
+  const byKey = useMemo(() => {
+    const map: Record<string, MatchConfigItem> = {}
+    data?.forEach((r) => { map[r.configKey] = r })
+    return map
+  }, [data])
+
+  const dirtyKeys = useMemo(() => {
+    if (!data) return [] as string[]
+    return Object.entries(draft)
+      .filter(([k, v]) => byKey[k] && byKey[k].configValue !== v)
+      .map(([k]) => k)
+  }, [draft, byKey, data])
+
+  // 마지막 수정 메타 — updatedAt 최대값 + 그 row 의 updatedBy
+  const lastUpdate = useMemo(() => {
+    if (!data || data.length === 0) return null
+    return data.reduce((acc, r) => (acc && acc.updatedAt > r.updatedAt ? acc : r))
+  }, [data])
+
+  // sortKey 가중치 합
+  const weightSum = useMemo(() => {
+    return WEIGHT_KEYS.reduce((sum, k) => {
+      const v = parseFloat(draft[k] ?? '0')
+      return sum + (isNaN(v) ? 0 : v)
+    }, 0)
+  }, [draft])
+  const weightSumOk = Math.abs(weightSum - 1) < 0.01
+
+  const mutation = useUpdateMatchConfigMutation({
     onSuccess: () => {
       setSaved('저장되었습니다.')
       setConfirmOpen(false)
@@ -53,124 +109,97 @@ export default function MatchingRatesPage() {
     },
   })
 
-  if (isLoading || !form) {
+  if (isLoading || !data) {
     return (
       <>
-        <Topbar title="매칭률 가중치" />
+        <Topbar title="매칭 설정값" />
         <div className="card text-center py-12 text-text-soft">불러오는 중...</div>
       </>
     )
   }
 
-  const weightSum =
-    form.age_weight +
-    form.area_weight +
-    form.mbti_weight +
-    form.purpose_weight +
-    form.drinking_weight +
-    form.smoking_weight +
-    form.hobby_weight
-
-  const normalizedOK = Math.abs(weightSum - 1) < 0.01
-
   const handleSaveClick = () => {
     setError(null)
-    if (!normalizedOK) {
-      setError(`가중치 합계가 1.00 이어야 합니다. 현재 ${weightSum.toFixed(2)}`)
+    if (dirtyKeys.length === 0) {
+      setError('변경된 항목이 없습니다.')
       return
+    }
+    if (!weightSumOk) {
+      setError(`sortKey 가중치 합이 1.0 이어야 합니다. 현재 ${weightSum.toFixed(2)}`)
+      return
+    }
+    // JSON 클라이언트 사전 검증
+    for (const k of dirtyKeys) {
+      if (byKey[k].valueType === 'JSON') {
+        try { JSON.parse(draft[k]) }
+        catch { setError(`${k}: JSON 형식이 올바르지 않습니다.`); return }
+      }
     }
     setConfirmOpen(true)
   }
-  const executeSave = () => mutation.mutate(form)
+
+  const executeSave = () => {
+    mutation.mutate({
+      entries: dirtyKeys.map((k) => ({ configKey: k, configValue: draft[k] })),
+    })
+  }
+
+  const resetDraft = () => {
+    const init: Record<string, string> = {}
+    data.forEach((r) => { init[r.configKey] = r.configValue })
+    setDraft(init)
+    setError(null)
+  }
 
   return (
     <>
       <Topbar
-        title="매칭률 가중치 조정"
-        subtitle="유저 간 매칭 점수 계산에 쓰이는 항목별 가중치 · 기본 매칭률 · 프리미엄 부스트를 조정합니다."
+        title="매칭 설정값 조정"
+        subtitle="code_match_config — 매칭 알고리즘이 매 호출 시 읽는 38개 키. 저장 즉시 다음 배치/요청에 반영됩니다."
       />
 
       <div className="card mb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[12px] text-text-soft font-bold">
-              마지막 수정: {formatDateTime(data?.updated_at)} ·{' '}
-              {data?.updated_by_admin_name ?? '-'}
-            </div>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="text-[12px] text-text-soft font-bold">
+            마지막 수정: {formatDateTime(lastUpdate?.updatedAt)} ·{' '}
+            {lastUpdate?.updatedBy ?? '-'}
           </div>
-          <div>
-            <span
-              className={`badge ${
-                normalizedOK ? 'badge-normal' : 'badge-danger'
-              }`}
-            >
+          <div className="flex items-center gap-2">
+            <span className={`badge ${weightSumOk ? 'badge-normal' : 'badge-danger'}`}>
               가중치 합계 {weightSum.toFixed(2)} / 1.00
+            </span>
+            <span className={`badge ${dirtyKeys.length > 0 ? 'badge-warn' : 'badge-normal'}`}>
+              변경 {dirtyKeys.length}건
             </span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="font-extrabold text-[14px] mb-3">📐 항목별 가중치</div>
-          <div className="space-y-4">
-            {WEIGHT_FIELDS.map((field) => (
-              <WeightSlider
-                key={field.key}
-                label={field.label}
-                hint={field.hint}
-                value={form[field.key] as number}
-                onChange={(v) => setForm({ ...form, [field.key]: v })}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="card">
-            <div className="font-extrabold text-[14px] mb-3">⚙️ 운영 파라미터</div>
-            <div className="space-y-5">
-              <SliderField
-                label="기본 매칭률"
-                hint="알고리즘이 산출한 점수를 0~1 사이로 변환할 때 기준값"
-                value={form.base_rate}
-                min={0}
-                max={1}
-                step={0.01}
-                format={(v) => `${Math.round(v * 100)}%`}
-                onChange={(v) => setForm({ ...form, base_rate: v })}
-              />
-              <SliderField
-                label="프리미엄 부스트 배율"
-                hint="프리미엄 유저 매칭 점수에 곱해지는 배율"
-                value={form.premium_boost}
-                min={1}
-                max={2}
-                step={0.05}
-                format={(v) => `×${v.toFixed(2)}`}
-                onChange={(v) => setForm({ ...form, premium_boost: v })}
-              />
+        {SECTIONS.map((section) => (
+          <div key={section.title} className="card">
+            <div className="font-extrabold text-[14px] mb-3">
+              {section.emoji} {section.title}
+            </div>
+            <div className="space-y-4">
+              {section.keys.map((key) => {
+                const row = byKey[key]
+                if (!row) return null
+                const value = draft[key] ?? row.configValue
+                const dirty = value !== row.configValue
+                return (
+                  <ConfigField
+                    key={key}
+                    item={row}
+                    value={value}
+                    dirty={dirty}
+                    onChange={(v) => setDraft((d) => ({ ...d, [key]: v }))}
+                  />
+                )
+              })}
             </div>
           </div>
-
-          <div className="card bg-surface-alt">
-            <div className="text-[12px] font-extrabold mb-2">📊 미리보기</div>
-            <div className="text-[11.5px] text-text-sub leading-relaxed">
-              합계 가중치: <strong>{weightSum.toFixed(3)}</strong>
-              <br />
-              기본 매칭률: <strong>{Math.round(form.base_rate * 100)}%</strong>
-              <br />
-              프리미엄 부스트: <strong>×{form.premium_boost.toFixed(2)}</strong>
-              <br />
-              <br />
-              예) 전 항목 일치 + 기본 매칭률 → {Math.min(100, Math.round(form.base_rate * 100 + weightSum * 38))}%
-              <br />
-              예) 일반 유저 + 기본만 → {Math.round(form.base_rate * 100)}%
-              <br />
-              예) 프리미엄 + 기본만 → {Math.min(100, Math.round(form.base_rate * 100 * form.premium_boost))}%
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="card mt-4 flex items-center justify-between">
@@ -178,19 +207,28 @@ export default function MatchingRatesPage() {
           {error && <span className="text-danger font-bold">{error}</span>}
           {saved && <span className="text-success font-bold">{saved}</span>}
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={handleSaveClick}
-          disabled={mutation.isPending}
-        >
-          {mutation.isPending ? '저장 중...' : '저장'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={resetDraft}
+            disabled={dirtyKeys.length === 0 || mutation.isPending}
+          >
+            초기화
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSaveClick}
+            disabled={mutation.isPending || dirtyKeys.length === 0}
+          >
+            {mutation.isPending ? '저장 중...' : `저장 (${dirtyKeys.length})`}
+          </button>
+        </div>
       </div>
 
       {confirmOpen && (
         <ConfirmDialog
-          title="가중치를 저장하시겠습니까?"
-          body="모든 신규 매칭 점수 계산에 즉시 반영됩니다."
+          title="설정값을 저장하시겠습니까?"
+          body={`변경 ${dirtyKeys.length}건 — 모든 신규 매칭 점수 계산에 즉시 반영됩니다.`}
           confirmLabel="예, 저장"
           tone="warn"
           pending={mutation.isPending}
@@ -202,76 +240,90 @@ export default function MatchingRatesPage() {
   )
 }
 
-function WeightSlider({
-  label,
-  hint,
+/* ───────── 키 1행 ───────── */
+
+function ConfigField({
+  item,
   value,
+  dirty,
   onChange,
 }: {
-  label: string
-  hint?: string
-  value: number
-  onChange: (v: number) => void
+  item: MatchConfigItem
+  value: string
+  dirty: boolean
+  onChange: (v: string) => void
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-[12px] font-extrabold">{label}</label>
-        <span className="text-[12px] font-extrabold text-point-dark">
-          {(value * 100).toFixed(0)}%
-        </span>
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <label className="text-[12px] font-extrabold flex-1 min-w-0 truncate">
+          <span className="text-text-soft font-bold">{item.configKey}</span>
+          {item.description && (
+            <span className="text-text-sub font-normal"> · {item.description}</span>
+          )}
+        </label>
+        {dirty && (
+          <span className="badge badge-warn text-[10px] shrink-0">변경됨</span>
+        )}
       </div>
-      <input
-        type="range"
-        min={0}
-        max={0.5}
-        step={0.01}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-[var(--color-point)]"
-      />
-      {hint && <div className="text-[11px] text-text-soft mt-0.5">{hint}</div>}
+      <ConfigInput item={item} value={value} onChange={onChange} />
     </div>
   )
 }
 
-function SliderField({
-  label,
-  hint,
+/** valueType 별 UI 분기 — INT/DOUBLE 숫자 입력, JSON textarea. */
+function ConfigInput({
+  item,
   value,
-  min,
-  max,
-  step,
-  format,
   onChange,
 }: {
-  label: string
-  hint?: string
-  value: number
-  min: number
-  max: number
-  step: number
-  format: (v: number) => string
-  onChange: (v: number) => void
+  item: MatchConfigItem
+  value: string
+  onChange: (v: string) => void
 }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-[12px] font-extrabold">{label}</label>
-        <span className="text-[13px] font-extrabold text-point-dark">
-          {format(value)}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
+  if (item.valueType === 'JSON') {
+    return (
+      <textarea
         value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-[var(--color-point)]"
+        onChange={(e) => onChange(e.target.value)}
+        rows={value.length > 60 ? 3 : 2}
+        className="w-full font-mono text-[11.5px] rounded-lg border border-divider bg-bg px-2 py-1.5 focus:outline-none focus:border-point"
+        spellCheck={false}
       />
-      {hint && <div className="text-[11px] text-text-soft mt-0.5">{hint}</div>}
-    </div>
+    )
+  }
+  if (item.valueType === 'DOUBLE') {
+    const num = parseFloat(value)
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={isNaN(num) ? 0 : num}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 accent-[var(--color-point)]"
+        />
+        <input
+          type="number"
+          min={0}
+          max={1}
+          step={0.01}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-[72px] text-right text-[12px] font-extrabold rounded border border-divider bg-bg px-2 py-1 focus:outline-none focus:border-point"
+        />
+      </div>
+    )
+  }
+  // INT
+  return (
+    <input
+      type="number"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full text-[13px] font-extrabold rounded-lg border border-divider bg-bg px-3 py-2 focus:outline-none focus:border-point"
+    />
   )
 }

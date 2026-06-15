@@ -90,8 +90,6 @@ function toBalCommentReply(be: AdminBalCommentBeDto): BalCommentReplyBe {
     letter: firstLetter(nickname),
     avColor: pickAvatarColor(be.authorUserId),
     authorUserId: be.authorUserId ?? 0,
-    // 어드민은 uuid 안 씀 — 빈 문자열 (suspend 모달 등 uuid 의존부는 후속 작업에서 id 기반 전환)
-    authorUserUuid: '',
     authorRealNickname: be.authorUserNickname ?? '(탈퇴)',
     text: be.content,
     createTime: be.createTime,
@@ -111,7 +109,6 @@ function toBalCommentTop(be: AdminBalCommentBeDto, gameId: number, replies: BalC
     letter: firstLetter(nickname),
     avColor: pickAvatarColor(be.authorUserId),
     authorUserId: be.authorUserId ?? 0,
-    authorUserUuid: '',
     authorRealNickname: be.authorUserNickname ?? '(탈퇴)',
     voteChoice: be.voteChoice,
     text: be.content,

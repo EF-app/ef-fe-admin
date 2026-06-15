@@ -14,6 +14,7 @@ export * from './bannedWord';
 export * from './premium';
 export * from './revenue';
 export * from './matchingMetrics';
+export * from './matchDailyFeed';
 export * from './adminMgmt';
 export * from './policy';
 export * from './systemMessage';

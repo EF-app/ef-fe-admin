@@ -76,7 +76,7 @@ export default function BlocksPage() {
                     <td>
                       <button
                         className="font-extrabold hover:text-point-dark hover:underline text-left"
-                        onClick={() => navigate(`/users/${b.blockerUuid}`)}
+                        onClick={() => navigate(`/users/${b.blockerId}`)}
                       >
                         {b.blockerNickname}
                         <span className="text-text-soft font-normal ml-1 text-[11px]">
@@ -90,7 +90,7 @@ export default function BlocksPage() {
                     <td>
                       <button
                         className="font-extrabold hover:text-point-dark hover:underline text-left"
-                        onClick={() => navigate(`/users/${b.blockedUuid}`)}
+                        onClick={() => navigate(`/users/${b.blockedId}`)}
                       >
                         {b.blockedNickname}
                         <span className="text-text-soft font-normal ml-1 text-[11px]">

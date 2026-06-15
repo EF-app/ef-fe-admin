@@ -92,7 +92,7 @@ export default function PremiumPage() {
                 <tr
                   key={m.user_id}
                   className="cursor-pointer"
-                  onClick={() => navigate(`/users/${m.user_uuid}`)}
+                  onClick={() => navigate(`/users/${m.user_id}`)}
                 >
                   <td className="font-extrabold">
                     <Crown size={11} className="inline mr-1 text-warn" />
